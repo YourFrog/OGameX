@@ -1,6 +1,7 @@
 Zbiór prostych skryptów do greasmonkey do gry ogamex.net
 
 ### Aktualna wersja:
+https://github.com/YourFrog/OGameX/releases/tag/v0.0.1-alpha.1
 
 ### Jak zainstalować?
 Wkrótce...
