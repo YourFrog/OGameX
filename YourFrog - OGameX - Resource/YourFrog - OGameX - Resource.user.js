@@ -15,15 +15,39 @@
 
 let planets = {}
 
+function utils_getCurrentCoordinates() {
+	return $('a.planet-select.selected span.planet-coords').clone().children().remove().end().text().trim();  
+}
+
+function utils_parseConstructionTime(constructionTimeText) {
+
+  let split = constructionTimeText.split(":").map(function(num) { return parseInt(num, 10); });
+  let seconds = 0;
+
+  switch(split.length) {
+    case 2: seconds = split[0] * 60 + split[1]; break;
+    case 3: seconds = split[0] * 3600 + split[1] * 60 + split[2]; break;
+  }
+      
+  return seconds
+}
+
 /**
  *	Uruchomienie skryptu
  */
 async function runScript() {
+  let isHomePage = location.pathname == "/home"
+  let isResourcePage = location.pathname == "/building/resource"
+  
 	let jsonSerialize = await GM.getValue('planets', '{}');
   planets = JSON.parse(jsonSerialize)
   
-  if (location.pathname == "/home") {
+  if (isHomePage) {
 		runScript_Home()
+  }
+  
+  if (isResourcePage) {
+   	runScript_Resource() 
   }
   
   console.log("YourFrog - Run 1");
@@ -32,8 +56,7 @@ async function runScript() {
   
   
   $(document).on('click', '.yourfrog-distribute-save', function() {
-    	let cords = $('a.planet-select.selected span.planet-coords').clone().children().remove().end().text().trim()
-    
+    	let cords = utils_getCurrentCoordinates()    
     	let obj = {
         metal: $(this).attr('data-metal'),
         crystal: $(this).attr('data-crystal'),
@@ -55,27 +78,19 @@ async function runScript() {
   (async() => {
     if (location.pathname == "/building/resource") {
       let cords = $('a.planet-select.selected span.planet-coords').text().trim();
+      let key = JSON.stringify(cords)
 
-        // let serialize = await GM.getValue('planets', '{}');
-        // let obj = JSON.parse(serialize)
-        let obj = planets
-        let key = JSON.stringify(cords)
+      planets[cords] = {
+        showWarning: false,
+        levels: {
+          metal: parseInt($('a[data-building-type="METAL_MINE"] span').eq(0).text()),
+          crystal: parseInt($('a[data-building-type="CRYSTAL_MINE"] span').eq(0).text()),
+          deuter: parseInt($('a[data-building-type="DEUTERIUM_REFINERY"] span').eq(0).text()),
+        },
+        construction: planets[cords].construction
+      }
 
-
-        obj[cords] = {
-          showWarning: false,
-          levels: {
-            metal: parseInt($('a[data-building-type="METAL_MINE"] span').eq(0).text()),
-            crystal: parseInt($('a[data-building-type="CRYSTAL_MINE"] span').eq(0).text()),
-            deuter: parseInt($('a[data-building-type="DEUTERIUM_REFINERY"] span').eq(0).text()),
-          },
-          construction: obj[cords].construction
-        }
-
-//         console.log("update", cords, obj)
-//         await GM.setValue('planets', JSON.stringify(obj));
-
-        await YourFrogAddMineLevelsToPlanets()
+      await YourFrogAddMineLevelsToPlanets()
     } else {
       await YourFrogAddMineLevelsToPlanets()
     }
@@ -107,9 +122,44 @@ async function runScript() {
   });  
   
   await GM.setValue('planets', JSON.stringify(planets));
+  
+  
+  setTimeout(function() {
+    $('span[data-construction-time]').each(function() {
+      
+    })
+  }, 1000)
+}
+
+async function runScript_Resource() {
+  let coordinates = utils_getCurrentCoordinates()
+  let planet = planets[coordinates]
+  
+  let elements = $('#firstConstruction div')
+  
+  let isUpgradeMetal = $('span:contains("Metal Mine")', elements).length == 1
+  let isUpgradeCrystal = $('span:contains("Crystal Mine")', elements).length == 1
+  let isUpgradeDeuter = $('span:contains("Deuterium Refinery")', elements).length == 1
+	
+  if (isUpgradeMetal || isUpgradeCrystal || isUpgradeDeuter) {
+    await updatePlanet(coordinates, (planet) => {
+      let constructionTimeText = $('#firstConstructionRemainingTime', elements).text()
+      let seconds = utils_parseConstructionTime(constructionTimeText)
+      let now = (new Date()).getTime()
+
+      planet.construction = {
+        left: seconds,
+        updateAt: now
+      }
+    })
+  } else {
+   	planet.construction = undefined 
+  }
 }
 
 async function runScript_Home() {
+  //////////////////////////////////////////////
+  
   let elementMetal = $('#overview-bottom .smallbox span:contains("Metal Mine")')
 	let elementCrystal = $('#overview-bottom .smallbox span:contains("Crystal Mine")')
   let elementDeuter = $('#overview-bottom .smallbox span:contains("Deuterium Refinery")')
@@ -118,6 +168,8 @@ async function runScript_Home() {
   let isUpgradeCrystal = elementCrystal.length == 1
   let isUpgradeDeuter = elementDeuter.length == 1
   
+  let coordinates = utils_getCurrentCoordinates()
+  
   if (isUpgradeMetal || isUpgradeCrystal || isUpgradeDeuter) {
     let constructionTime;
     
@@ -125,24 +177,22 @@ async function runScript_Home() {
     if (isUpgradeCrystal) { constructionTime = $(elementCrystal).parent().find('#buildingConstructionTime').text() }
     if (isUpgradeDeuter) { constructionTime = $(elementDeuter).parent().find('#buildingConstructionTime').text() }
     
-	  let coordinates = $('a.planet-select.selected span.planet-coords').clone().children().remove().end().text().trim();
      
     await updatePlanet(coordinates, (planet) => {
-      let split = constructionTime.split(":").map(function(num) { return parseInt(num, 10); });
-      let seconds = 0;
-      let now = (new Date()).getTime()
-      
-      switch(split.length) {
-        case 2: seconds = split[0] * 60 + split[1]; break;
-        case 3: seconds = split[0] * 3600 + split[1] * 60 + split[2]; break;
-      }
+      let constructionTimeText = constructionTime
+      let seconds = utils_parseConstructionTime(constructionTimeText)
+  		let now = (new Date()).getTime()
       
       planet.construction = {
         left: seconds,
         updateAt: now
       }
     })
-  }  
+  } else {
+    await updatePlanet(coordinates, (planet) => {
+      planet.construction = undefined
+    })
+  }
 }
 
 async function updatePlanet(coordinates, callback) {
@@ -271,13 +321,16 @@ function YourFrogAddMineLevelsToPlanet(showWarning, cords, levels, minimumLevels
     `
   } else {
     if (typeof construction  !== "undefined") {
+      console.log("construction", construction)
       let now = (new Date()).getTime()
 			let ageInSeconds = parseInt((now - construction.updateAt) / 1000)
       let leftInSeconds = construction.left - ageInSeconds
           
-      constructionContent = `
-      	<span>` +  secondsToReadable(leftInSeconds)  + `</span>
-      `
+      if (leftInSeconds > 0) {
+        constructionContent = `
+          <span data-construction-time="` + leftInSeconds + `">` +  secondsToReadable(leftInSeconds)  + `</span>
+        `
+      }
     }
   }
   
