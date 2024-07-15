@@ -80,6 +80,8 @@ async function runScript() {
       let cords = $('a.planet-select.selected span.planet-coords').text().trim();
       let key = JSON.stringify(cords)
 
+      let planet = planets[cords]
+      
       planets[cords] = {
         showWarning: false,
         levels: {
@@ -87,7 +89,7 @@ async function runScript() {
           crystal: parseInt($('a[data-building-type="CRYSTAL_MINE"] span').eq(0).text()),
           deuter: parseInt($('a[data-building-type="DEUTERIUM_REFINERY"] span').eq(0).text()),
         },
-        construction: planets[cords].construction
+        construction: planet ? planet.construction : undefined
       }
 
       await YourFrogAddMineLevelsToPlanets()
@@ -134,6 +136,8 @@ async function runScript() {
 async function runScript_Resource() {
   let coordinates = utils_getCurrentCoordinates()
   let planet = planets[coordinates]
+  
+  if (typeof planet === 'undefined') { return }
   
   let elements = $('#firstConstruction div')
   
@@ -196,11 +200,9 @@ async function runScript_Home() {
 }
 
 async function updatePlanet(coordinates, callback) {
-//   let serialize = await GM.getValue('planets', '{}');
-//   let obj = JSON.parse(serialize)
-	let obj = planets
+  let planet = planets[coordinates]
   
-  let planet = obj[coordinates]
+  if (typeof planet === 'undefined') { return }
   
   callback(planet)
 }
@@ -234,8 +236,6 @@ function extractUpgradeInformation() {
 }
 
 async function YourFrogAddMineLevelsToPlanets() {
-//   let serialize = await GM.getValue('planets', '{}');
-//   let obj = JSON.parse(serialize)
   let obj = planets
   
   let minimum = {metal: 9999, crystal: 9999, deuter: 9999}
@@ -243,6 +243,9 @@ async function YourFrogAddMineLevelsToPlanets() {
   for(cords in obj) {
     let data = obj[cords]
 		let upgrade = extractUpgradeInformation()[cords]
+    
+    if (typeof upgrade === 'undefined' || typeof upgrade.isBuildingUpgrade === 'undefined') { continue }
+    
     let isMetalUpgrade = upgrade.isBuildingUpgrade && upgrade.buildingData.name == 'Metal Mine'
     let isCrystalUpgrade = upgrade.isBuildingUpgrade && upgrade.buildingData.name == 'Crystal Mine'
     let isDeuterUpgrade = upgrade.isBuildingUpgrade && upgrade.buildingData.name == 'Deuterium Refinery'
@@ -283,6 +286,9 @@ async function YourFrogAddMineLevelsToPlanets() {
   for(cords in obj) {
     let data = obj[cords]
 		let upgrade = extractUpgradeInformation()[cords]
+    
+    if (typeof upgrade === 'undefined' || typeof upgrade.isBuildingUpgrade === 'undefined') { return }
+    
     let isMetalUpgrade = upgrade.isBuildingUpgrade && upgrade.buildingData.name == 'Metal Mine'
     let isCrystalUpgrade = upgrade.isBuildingUpgrade && upgrade.buildingData.name == 'Crystal Mine'
     let isDeuterUpgrade = upgrade.isBuildingUpgrade && upgrade.buildingData.name == 'Deuterium Refinery'
@@ -296,6 +302,8 @@ async function YourFrogAddMineLevelsToPlanets() {
 
 function YourFrogAddMineLevelsToPlanet(showWarning, cords, levels, minimumLevels, construction) {
 	let upgrade = extractUpgradeInformation()[cords]
+  if (typeof upgrade === 'undefined' || typeof upgrade.isBuildingUpgrade === 'undefined') { return }
+  
   let isMetalUpgrade = upgrade.isBuildingUpgrade && upgrade.buildingData.name == 'Metal Mine'
   let isCrystalUpgrade = upgrade.isBuildingUpgrade && upgrade.buildingData.name == 'Crystal Mine'
   let isDeuterUpgrade = upgrade.isBuildingUpgrade && upgrade.buildingData.name == 'Deuterium Refinery'
@@ -338,9 +346,9 @@ function YourFrogAddMineLevelsToPlanet(showWarning, cords, levels, minimumLevels
 	$('#other-planets .planet-item .planet-coords:contains("' + cords + '")').append(`
   <div>
   	` + warningContent + `
-  	<span style="color: ` + colors.metal + `">` + levels.metal + (isMetalUpgrade ? " -> " + upgrade.buildingData.toLevel : "" ) + `</span>
-  	<span style="color: ` + colors.crystal + `">` + levels.crystal + (isCrystalUpgrade ? " -> " + upgrade.buildingData.toLevel : "" )  + `</span>
-  	<span style="color: ` + colors.deuter + `">` + levels.deuter + (isDeuterUpgrade ? " -> " + upgrade.buildingData.toLevel : "" )  + `</span>
+  	<span style="color: ` + colors.metal + (colors.metal == "gold" ? ';font-weight: bold;' : '') + `">` + levels.metal + (isMetalUpgrade ? " -> " + upgrade.buildingData.toLevel : "" ) + `</span>
+  	<span style="color: ` + colors.crystal + (colors.crystal == "gold" ? ';font-weight: bold;' : '') + `">` + levels.crystal + (isCrystalUpgrade ? " -> " + upgrade.buildingData.toLevel : "" )  + `</span>
+  	<span style="color: ` + colors.deuter + (colors.deuter == "gold" ? ';font-weight: bold;' : '') + `">` + levels.deuter + (isDeuterUpgrade ? " -> " + upgrade.buildingData.toLevel : "" )  + `</span>
     ` + constructionContent + `
   </div>
 	`)

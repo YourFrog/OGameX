@@ -2,12 +2,14 @@
 // @name     YourFrog - OGameX - Galaxy
 // @version  1
 // @include  *https://hyper.ogamex.net/galaxy*
+// @include  *https://hyper.ogamex.net/messages*
 // @require https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js 
 // @grant           GM.setValue
 // @grant           GM.getValue
 // @grant    GM.setClipboard
 // ==/UserScript==
 
+let dataOfGalaxy = {}
 let asteroids = {}
 
 const settings = {
@@ -23,6 +25,9 @@ const settings = {
           // Przy jakiej ilości kryształu podświetli sie pole
           crystal: 1_000_000_000
         }
+    },
+    farm: {
+     	minimum_ranking: 1800 
     }
   },
   colors: {
@@ -86,16 +91,13 @@ function systemHasHugeDebris() {
 }
 
 async function savePlanetsData(planets) {
-  let serialize = await GM.getValue('galaxy', '{}');
-  let obj = JSON.parse(serialize)
-  
   for(index in planets) {
     let item = planets[index]
     
-  	obj[item.cords] = item
+  	dataOfGalaxy[item.cords] = item
   }
   
-  let serializeObj = JSON.stringify(obj);
+  let serializeObj = JSON.stringify(dataOfGalaxy);
   await GM.setValue('galaxy', serializeObj);
 }
 
@@ -181,12 +183,18 @@ async function runScript() {
   })
   
   $(document).on('click', '#yourfrog-scan-galaxy', function(event) {
+    event.preventDefault()
     
     if (scanerHandler == null) {
       scanerHandler = setInterval(function() {
     		utils_UpdateGalaxySystem()
+        let isLoader = $('#BackGroundFreezerPreloader_Element').length == 1
         let system = $('#systemInput').val()
 
+        if (isLoader) { 
+          return false; 
+        }
+        
         if (system < 499) {
           $('#btnSystemRight')[0].click();
         }
@@ -195,8 +203,6 @@ async function runScript() {
      clearInterval(scanerHandler); 
       scanerHandler = null
     }
-    
-    event.preventDefault()
   })
   
   $(document).on('click', '#yourfrog-scan-asteroid', function(event) {
@@ -267,6 +273,7 @@ async function runScript() {
         
         
         asteroids[galaxy + ":" + system].is_send = true;
+        asteroids[galaxy + ":" + system].sendAt = (new Date()).getTime();
         
         
         (async() => {
@@ -307,17 +314,148 @@ async function runScript() {
         await GM.setValue('galaxy', serializeObj);
       })()
   })
-                 
-  setInterval(function() {
-    utils_UpdateGalaxySystem()
-  }, 100)  
+  
+  
+         
+  
+  $(document).on('click', '.item-low-farm', function(event) {
+    	event.preventDefault();
+    
+    	(async() => {    
+	      let serialize = await GM.getValue('galaxy', '{}');
+  	    let data = JSON.parse(serialize)
+        
+        let galaxy = $(this).data('galaxy')
+        let system = $(this).data('system')
+        let position = $(this).data('position')
+        
+        let cords = galaxy + ":" + system + ":" + position
+
+        data[cords].isLowFarm = true
+       
+        let serializeObj = JSON.stringify(data);
+        await GM.setValue('galaxy', serializeObj);
+        
+        alert("Gracz oznaczony jako słaba farma")
+      })()
+    	
+  })
+  
+  $(document).on('click', '.item-high-farm', function(event) {
+    	event.preventDefault();
+    
+    	(async() => {    
+	      let serialize = await GM.getValue('galaxy', '{}');
+  	    let data = JSON.parse(serialize)
+        
+        let galaxy = $(this).data('galaxy')
+        let system = $(this).data('system')
+        let position = $(this).data('position')
+        
+        let cords = galaxy + ":" + system + ":" + position
+
+        data[cords].isLowFarm = false
+       
+        let serializeObj = JSON.stringify(data);
+        await GM.setValue('galaxy', serializeObj);
+        
+        alert("Gracz oznaczony jako słaba farma")
+      })()
+    	
+  })
+  
+  $(document).on('click', '.item-normal-farm', function(event) {
+    	event.preventDefault();
+    
+    	(async() => {    
+	      let serialize = await GM.getValue('galaxy', '{}');
+  	    let data = JSON.parse(serialize)
+        
+        let galaxy = $(this).data('galaxy')
+        let system = $(this).data('system')
+        let position = $(this).data('position')
+        
+        let cords = galaxy + ":" + system + ":" + position
+
+        data[cords].isLowFarm = undefined
+       
+        let serializeObj = JSON.stringify(data);
+        await GM.setValue('galaxy', serializeObj);
+        
+        alert("Gracz oznaczony jako słaba farma")
+      })()
+    	
+  })
+  
+  let isGalaxyPage = location.pathname == "/galaxy"
+  let isMessagePage = location.pathname == "/messages"
+  
+  if (isGalaxyPage) {
+    setInterval(function() {
+      utils_UpdateGalaxySystem()
+    }, 100)  
+  }
+  
+	if (isMessagePage) {        
+    setInterval(function() {
+      (async() => {
+        utils_UpdateCombatMessages()
+      })()
+    }, 1000)
+  }
 }
 
 $(document).ready(function() {
   (async() => {
+    let serialize = await GM.getValue('galaxy', '{}');
+    dataOfGalaxy = JSON.parse(serialize)
+    
     runScript()
   })()
-})
+});
+
+async function utils_UpdateCombatMessages() {
+  console.log('utils_UpdateCombatMessages')
+  
+  $('[data-msg-template="FLEET_BATTLE_REPORT"]').each(function() {
+    let hasLowFarm = $('.item-low-farm', this).length > 0
+    let hasHighFarm = $('.item-high-farm', this).length > 0
+          
+    if (hasLowFarm || hasHighFarm) {
+    	return  
+    }
+    
+    let normalizeCords = $('span:contains("Combat report:") a', this).text().split('[')[1].split(']')[0]
+    let split = normalizeCords.split(':')
+    
+    let type = "low";
+    let farm = dataOfGalaxy[normalizeCords]
+    
+    let isNormalFarm = typeof farm.isLowFarm === 'undefined'
+        
+    let content = ''
+    
+    if (!isNormalFarm) {
+	    content += `
+    		<a href="#" class="item-normal-farm" data-galaxy="` + split[0] + `" data-system="` + split[1] + `" data-position="` + split[2] + `" style="color: white">Oznacz jako zwykła farma</a>
+    	`
+    }
+    
+    if (isNormalFarm || farm.isLowFarm === true) {
+      content += `
+    		<a href="#" class="item-low-farm" data-galaxy="` + split[0] + `" data-system="` + split[1] + `" data-position="` + split[2] + `" style="color: lime">Oznacz jako dobra farma</a>
+      `
+    }
+    
+    if (isNormalFarm || farm.isLowFarm === false) {
+      content += `
+    		<a href="#" class="item-low-farm" data-galaxy="` + split[0] + `" data-system="` + split[1] + `" data-position="` + split[2] + `" style="color: orange">Oznacz jako słaba farma</a>
+      `;
+    } 
+    
+    $('.message-actions', this).append(content)
+  })
+}
 
 function utils_UpdateGalaxySystem() {
   
@@ -333,11 +471,10 @@ function utils_UpdateGalaxySystem() {
     $('#galaxyContent .galaxy-item').each(function() {
       let galaxy = $('#galaxyInput').val()
       let system = $('#systemInput').val()
-      
+      let position = $('.planet-index', this).text()
+          
       let isHead = $(this).hasClass('galaxy-item-head')
       if (isHead) { return }
-      
-			let position = $('.planet-index', this).text()
       
       if (position == 16) { return }
       if (position == 17) { 
@@ -363,8 +500,6 @@ function utils_UpdateGalaxySystem() {
             oldItem.left = seconds
             oldItem.updateAt = now
         }
-        
-//         asteroids[galaxy + ":" + system] = ((typeof seconds == 'undefined') ? undefined : );
         
         (async() => {
   				let serializeObj = JSON.stringify(asteroids);
@@ -395,14 +530,18 @@ function utils_UpdateGalaxySystem() {
           if (isMetal) { debris.metal = value }
         	if (isCrystal) { debris.crystal = value }
       })
-	
+			
+      let cords = galaxy + ":" + system + ":" + position
       let now = new Date()
-      let item = {}
+      let item = dataOfGalaxy[cords] ? dataOfGalaxy[cords] : {
+      	last_attack: undefined,
+        isLowFarm: undefined
+      }
 
       item.galaxy = galaxy
       item.system = system
-      item.position = $('.planet-index', this).text()
-      item.cords = galaxy + ":" + system + ":" + $('.planet-index', this).text()
+      item.position = position
+      item.cords = cords
       item.planet_name = $('.col-planet-name', this).text().replaceAll("\n", "").trim()
       item.alliance = $('.col-alliance', this).text().replaceAll("\n", "").trim()
       item.player_name = $('.col-player > a > span', this).eq(0).text().replaceAll("\n", "").trim()
@@ -412,7 +551,6 @@ function utils_UpdateGalaxySystem() {
       item.is_inactive7 = $('.col-player .isInactive7.tooltip', this).length == 1
       item.is_inactive28 = $('.col-player .isInactive28.tooltip', this).length == 1
       item.is_vacation = $('.col-player .isVacation.tooltip', this).length == 1
-      item.last_attack = undefined
       item.debris = debris
       
       let tooltipContentHtml = $('.col-player span[data-tooltip-content]', this).data('tooltip-content')
@@ -468,21 +606,50 @@ async function drawIdlers() {
      	continue 
     }
     
+    if (item.ranking >= settings.galaxy.farm.minimum_ranking) {
+    	continue
+
+    }
+    
+    
     let now = (new Date()).getTime()
-    let highlight = "lime"
+    let highlight = "white"
     
     let lastAttackInSeconds = item.last_attack ? (now - item.last_attack) / 1000 : 0
     
-    if (lastAttackInSeconds == 0) { highlight = "lime" }
-    if (lastAttackInSeconds > 0) { highlight = "orange" }
-    if (lastAttackInSeconds >= 60 * 60) { highlight = "lime" }
-    if (item.debris.metal != 0 || item.debris.crystal != 0) { highlight = "pink" }
+//     if (lastAttackInSeconds == 0) { highlight = "lime" }
+//     if (lastAttackInSeconds > 0) { highlight = "orange" }
+//     if (lastAttackInSeconds >= 60 * 60) { highlight = "lime" }
+    
+    let hasTimer = lastAttackInSeconds > 0 && lastAttackInSeconds < 60 * 60
+    let isUnmark = (typeof item.isLowFarm == "undefined")
+    let isMark = !isUnmark
+    let hasDebris = item.debris.metal != 0 || item.debris.crystal != 0
+        
+    switch(true) {
+      case hasDebris: highlight = "pink"; break;
+        
+      // Nie oznaczony i posiada timer 
+      case isUnmark && hasTimer: highlight = 'orange'; break; 
+        
+      // Nie oznaczony i nie posiada timera
+      case isUnmark && !hasTimer: highlight = 'lime'; break; 
+        
+      // Oznaczony jako słaba farma
+      case isMark && item.isLowFarm === true: highlight = 'red'; break;
+        
+      // Oznaczony jako dobra farma i nie posiada timer'a
+      case isMark && item.isLowFarm === false && !hasTimer: highlight = 'gold'; break;
+        
+      // Oznaczony jako dobra farma i posiada timer'a
+      case isMark && item.isLowFarm === false && hasTimer: highlight = 'orange'; break;
+    }
     
     content += `
     	<li>
             <a href="fleet?x=` + item.galaxy + `&y=` + item.system + `&z=` + item.position + `&planet=1&mission=8" class="attack-item" data-galaxy="` + item.galaxy + `" data-system="` + item.system + `" data-position="` + item.position + `">
             	<span style="font-size: 8px; color: ` + highlight + `">
-              	` + item.ranking + ` - ` + item.cords + ` ` + (lastAttackInSeconds > 0 ? '- last attack: ' + secondsToReadable(lastAttackInSeconds) : '') + `
+              	` + item.ranking + ` - ` + item.cords + ` ` + (lastAttackInSeconds > 0 && lastAttackInSeconds < 60 * 60 ? '- last attack: ' + secondsToReadable(lastAttackInSeconds) : '') + `
                 </span>
             </a>
             
@@ -502,6 +669,8 @@ async function drawIdlers() {
 	      <li><span style="font-size: 7px; color:lime">Dawno nie atakowany</span></li>
   	    <li><span style="font-size: 7px; color:orange">Zaatakowany niedawno</span></li>
     	  <li><span style="font-size: 7px; color:pink">Posiada debris</span></li>
+    	  <li><span style="font-size: 7px; color:red">Słaba farma</span></li>
+    	  <li><span style="font-size: 7px; color:gold">Dobra farma</span></li>
       </ul>
     	<ul>
       	` + content + `
@@ -529,10 +698,16 @@ function drawAsteroids() {
     
     let highlight = "lime"
     if (item.is_send > 0) { highlight = "orange" }
+    
+    
+    let sendAtInSeconds = item.sendAt ? (now - item.sendAt) / 1000 : 0
+    
     content += `
           <li>            
             <a href="fleet?x=` + item.galaxy + `&y=` + item.system + `&z=17&planet=1&mission=12" class="asteroid-item" data-galaxy="` + item.galaxy + `" data-system="` + item.system + `">
-            	<span style="font-size: 8px; color: ` + highlight + `">` + cords + ` [` + secondsToReadable(leftInSeconds) + `]</span>
+            	<span style="font-size: 8px; color: ` + highlight + `">` + cords + ` [` + secondsToReadable(leftInSeconds) + `] ` + (sendAtInSeconds > 0 ? '- wysłano: ' + secondsToReadable(sendAtInSeconds) + " temu" : '') + `</span>
+              	
+              <a href="https://hyper.ogamex.net/galaxy?x=` + item.galaxy + `&y=` + item.system + `" style="font-size: 7px; color: white;">Galaktyka</a>
             </a>
           </li>
 		`
