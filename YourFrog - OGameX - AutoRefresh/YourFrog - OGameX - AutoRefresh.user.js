@@ -8,13 +8,43 @@
 // @grant    GM.setClipboard
 // ==/UserScript==
 
-
 var settings = {
-  // Minimalny czas odświeżenia planety (w sekundach)
-	min: 120, //10 * 60,
+  delay: {
+   	planet: {
+  		// Minimum seconds for refresh planet (seconds)
+     	min: 10 * 60,
+      
+  		// Maximum seconds for refresh planet (seconds)
+      max: 13 * 60
+    },
+    moon: {
+  		// Minimum seconds for refresh moon (seconds)
+     	min: 5 * 60,
+      
+  		// Maximum seconds for refresh moon (seconds)
+      max: 5 * 60
+    }
+  },
   
-  // Maksymalny czas odświeżenia planety (w sekundach)
-  max: 120 // 10 * 60
+  // List of planets for ignore
+  ignorePlanets: [
+    
+    // possible type:
+    //  * planet, 
+    //  * moon
+    //  * all - Ignore both planet or moon
+    //
+    // Sample: 
+    //  {coordinate: '1:145:9', type: 'planet'},
+    //  {coordinate: '1:346:9', type: 'all'}, 
+    
+    {coordinate: '1:346:9', type: 'all'}
+  ]
+  
+}
+
+var global = {
+	planets: []  
 }
 
 var isEnable = true
@@ -62,32 +92,56 @@ async function runScript() {
 async function startTimer() {  
   let now = (new Date()).getTime()
   
-  let items = await getAllPlanetsAndMoons()
+  global.planets = await getAllPlanetsAndMoons()
   let currentItem = getCurrentPlanerOrMoon()
   
- 	items[currentItem.coordinate + "-" + currentItem.type].updateAt = now
+ 	global.planets[currentItem.coordinate + "-" + currentItem.type].updateAt = now
   
   let minimum = null
-  for (index in items) {
-    let item = items[index]
+  for (index in global.planets) {
+    let item = global.planets[index]
   	item.left = parseInt(item.delay - ((now - item.updateAt) / 1000))
     
     
+    if (isIgnorePlanet(item)) { 
+      console.log('ignore planet', item)
+      continue 
+    }
+
     if (minimum == null || minimum.left > item.left) {
      	minimum = item 
     }
   }
   
   $('#yourfrog-refresh').attr('data-left', minimum.left)
-	savePlanets(items)
+	savePlanets(global.planets)
   
   if (isEnable) {
     handler = setInterval(() => {
-      tick(items, minimum)
+      tick(global.planets, minimum)
     }, 1000)
   }
 }
+ 
+/**
+ *	Sprawdzenie czy planetę można zignorować
+ */
+function isIgnorePlanet(planet) {
+
+  for(let index in settings.ignorePlanets) {
+    let item = settings.ignorePlanets[index]
+    
+//     console.log('candidate', item, planet)
+    if (item.coordinate != planet.coordinate) { continue; }
+    if (item.type != planet.type && item.type != 'all') { continue; }
+    
+    return true
+  }
   
+  return false
+}
+
+
 function tick(items, minimum) {
     let element = $('.menu-item > a[data-left]')
     let value = element.data('left') - 1
@@ -107,7 +161,7 @@ function tick(items, minimum) {
   		let now = (new Date()).getTime()
   
       minimum.updateAt = now
-      minimum.delay = getRandomInt(settings.min, settings.max)
+      minimum.delay = calculateDelay(minimum.type)
       
       
       savePlanets(items)
@@ -119,6 +173,17 @@ function tick(items, minimum) {
       
       return;
     }
+}
+
+function calculateDelay(itemType) {
+  let range
+  
+  switch(true) {
+    case itemType == 'moon': range = settings.delay.moon;  break;
+    case itemType == 'planet': range = settings.delay.planet; break;
+  }
+
+  return getRandomInt(range.min, range.max);
 }
 
 async function savePlanets(planets) {
@@ -159,13 +224,13 @@ async function getAllPlanetsAndMoons() {
       result[coordinate + "-moon"] = result[coordinate + "-moon"] || {
         coordinate: coordinate,
         type: 'moon',
-        delay: getRandomInt(settings.min, settings.max),
+        delay: calculateDelay('moon'),
         updateAt: (new Date()).getTime()
       }
     }
                  
     result[coordinate + "-planet"] = result[coordinate + "-planet"] || {
-      delay: getRandomInt(settings.min, settings.max),
+      delay: calculateDelay('planet'),
      	coordinate: coordinate,
       type: 'planet',
       updateAt: (new Date()).getTime()

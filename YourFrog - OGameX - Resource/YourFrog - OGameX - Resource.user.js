@@ -2,6 +2,7 @@
 // @name     YourFrog - OGameX - Resource
 // @version  1
 // @include  *hyper.ogamex.net/home*
+// @include  *hyper.ogamex.net/messages*
 // @include  *hyper.ogamex.net/hangar*
 // @include  *hyper.ogamex.net/defense*
 // @include  *hyper.ogamex.net/research*
@@ -33,6 +34,38 @@ function utils_parseConstructionTime(constructionTimeText) {
 }
 
 /**
+ *	Aktualizacja informacji o surowcach na aktualnej planecie
+ */
+function updateResourceInformation() {
+  let cords = utils_getCurrentCoordinates()
+  let planet = planets[cords]
+  
+  if (typeof planet == 'undefined') { return }
+  if (typeof unsafeWindow.resources == 'undefined') { return }
+  
+  let resources = unsafeWindow.resources
+      
+  planet.resources = {
+   	metal: {
+     	storage: resources.metalStorageCapacity,
+      production: resources.metalProduction,
+      value: resources.initialMetal 
+    },
+   	crystal: {
+     	storage: resources.crystalStorageCapacity,
+      production: resources.crystalProduction,
+      value: resources.initialCrystal 
+    },
+   	deuter: {
+     	storage: resources.deuteriumStorageCapacity,
+      production: resources.deuteriumProduction,
+      value: resources.initialDeuterium 
+    },
+    updateAt: (new Date()).getTime()
+  }
+}
+
+/**
  *	Uruchomienie skryptu
  */
 async function runScript() {
@@ -41,6 +74,8 @@ async function runScript() {
   
 	let jsonSerialize = await GM.getValue('planets', '{}');
   planets = JSON.parse(jsonSerialize)
+  
+  updateResourceInformation()
   
   if (isHomePage) {
 		runScript_Home()
@@ -77,7 +112,7 @@ async function runScript() {
   ///////////////////////// Poziomy budynków
   (async() => {
     if (location.pathname == "/building/resource") {
-      let cords = $('a.planet-select.selected span.planet-coords').text().trim();
+      let cords = utils_getCurrentCoordinates()
       let key = JSON.stringify(cords)
 
       let planet = planets[cords]
@@ -92,6 +127,9 @@ async function runScript() {
         construction: planet ? planet.construction : undefined
       }
 
+      // Zaaktualizujemy informacje na tej planecie
+      updateResourceInformation()
+      
       await YourFrogAddMineLevelsToPlanets()
     } else {
       await YourFrogAddMineLevelsToPlanets()
@@ -130,6 +168,25 @@ async function runScript() {
     $('span[data-construction-time]').each(function() {
       
     })
+  }, 1000)
+  
+  setInterval(function() {
+    $('.resource-timer').each(function() {
+      let data = {
+      	production: $(this).data('production'),
+        initial: $(this).data('inital'),
+        updateAt: $(this).data('date')
+    	}
+                
+      let now = (new Date()).getTime()
+      let diffInSeconds = (now - data.updateAt) / 1000
+      
+      let value = diffInSeconds * data.production + data.initial
+      let readableValue = YourFrogResourceAmountFormat(value)
+      
+      $(this).text(readableValue)
+    })
+    
   }, 1000)
 }
 
@@ -296,11 +353,11 @@ async function YourFrogAddMineLevelsToPlanets() {
     // Jeżeli mamy wyświetlić warning to upewnijmy się że żadna kopalnia nie jest budowana
     let showWarning = data.showWarning ? !(isMetalUpgrade || isCrystalUpgrade || isDeuterUpgrade) : false
     
-    YourFrogAddMineLevelsToPlanet(showWarning, cords, data.levels, minimum, data.construction)
+    YourFrogAddMineLevelsToPlanet(showWarning, cords, data.levels, data.resources, minimum, data.construction)
   }  
 }
 
-function YourFrogAddMineLevelsToPlanet(showWarning, cords, levels, minimumLevels, construction) {
+function YourFrogAddMineLevelsToPlanet(showWarning, cords, levels, resources, minimumLevels, construction) {
 	let upgrade = extractUpgradeInformation()[cords]
   if (typeof upgrade === 'undefined' || typeof upgrade.isBuildingUpgrade === 'undefined') { return }
   
@@ -342,6 +399,31 @@ function YourFrogAddMineLevelsToPlanet(showWarning, cords, levels, minimumLevels
     }
   }
   
+  let contentOfResource = ''
+  
+  if (resources) {
+    let now = (new Date()).getTime()
+    let diffInSeconds = (now - resources.updateAt) / 1000
+
+    if (diffInSeconds < 5 * 60) {
+      let opacity = 1 - (diffInSeconds / (5 * 60))
+      
+      contentOfResource = `
+        <div style="opacity: ` + opacity + `">
+          <span style="font-size: 7px;color: #ffaacca1" class="resource-timer" data-production="` + resources.metal.production + `" data-inital="` + resources.metal.value + `" data-date="` + resources.updateAt + `">
+          	` + (resources ? YourFrogResourceAmountFormat(resources.metal.value) : '?')  + `
+          </span>
+          <span style="font-size: 7px;color: #73e5ffc7" class="resource-timer" data-production="` + resources.crystal.production + `" data-inital="` + resources.crystal.value + `" data-date="` + resources.updateAt + `">
+          	` + (resources ? YourFrogResourceAmountFormat(resources.crystal.value) : '?')  + `
+          </span>
+          <span style="font-size: 7px;color: #a6e0b0" class="resource-timer" data-production="` + resources.deuter.production + `" data-inital="` + resources.deuter.value + `" data-date="` + resources.updateAt + `">
+          	` + (resources ? YourFrogResourceAmountFormat(resources.deuter.value) : '?')  + `
+          </span>
+        </div>
+      `
+    }
+  }
+  
 	// Dodanie informacji o misji
 	$('#other-planets .planet-item .planet-coords:contains("' + cords + '")').append(`
   <div>
@@ -351,9 +433,43 @@ function YourFrogAddMineLevelsToPlanet(showWarning, cords, levels, minimumLevels
   	<span style="color: ` + colors.deuter + (colors.deuter == "gold" ? ';font-weight: bold;' : '') + `">` + levels.deuter + (isDeuterUpgrade ? " -> " + upgrade.buildingData.toLevel : "" )  + `</span>
     ` + constructionContent + `
   </div>
+  ` + contentOfResource + `
 	`)
 }
 
+function YourFrogResourceAmountFormat(value) {
+  let number
+  let sufix
+  
+  if (value > 1_000) {
+    	number = value / 1_000
+      sufix = "K" 
+  }
+  
+  if (value > 1_000_000) {
+    	number = value / 1_000_000
+      sufix = "KK" 
+  }
+  
+  if (value > 1_000_000_000) {
+    	number = value / 1_000_000_000
+      sufix = "KKK" 
+  }
+  
+  if (value > 1_000_000_000_000) {
+    	number = value / 1_000_000_000_000
+      sufix = "KKKK" 
+  }
+  
+  let fixed = number.toFixed(2).replace(/\.0+$/,'')
+  
+  if (!fixed.includes('.')) {
+    fixed += ".00"
+  }
+  
+  return fixed + " " + sufix
+//   return (Math.floor(number * 100) / 100).toFixed(2).replace(/\.0+$/,'') + " " + sufix
+}
 
 function YourFrogTiming(resources) {
 	function formatTime(seconds) {
