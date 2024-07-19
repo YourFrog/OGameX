@@ -320,6 +320,7 @@ async function YourFrogAddMineLevelsToPlanets() {
     if (obj[cords].showWarning == false) {
     	obj[cords].showWarning = isMetalUpgrade || isCrystalUpgrade || isDeuterUpgrade
     }
+    
   }
   
   console.log("Minimum before: ", minimum)
@@ -344,7 +345,8 @@ async function YourFrogAddMineLevelsToPlanets() {
     let data = obj[cords]
 		let upgrade = extractUpgradeInformation()[cords]
     
-    if (typeof upgrade === 'undefined' || typeof upgrade.isBuildingUpgrade === 'undefined') { return }
+    if (typeof upgrade === 'undefined' || typeof upgrade.isBuildingUpgrade === 'undefined') { continue }
+    
     
     let isMetalUpgrade = upgrade.isBuildingUpgrade && upgrade.buildingData.name == 'Metal Mine'
     let isCrystalUpgrade = upgrade.isBuildingUpgrade && upgrade.buildingData.name == 'Crystal Mine'

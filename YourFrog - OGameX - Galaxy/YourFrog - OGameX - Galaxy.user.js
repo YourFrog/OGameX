@@ -3,14 +3,18 @@
 // @version  1
 // @include  *https://hyper.ogamex.net/galaxy*
 // @include  *https://hyper.ogamex.net/messages*
+// @include  *https://hyper.ogamex.net/fleet*
 // @require https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js 
 // @grant           GM.setValue
 // @grant           GM.getValue
 // @grant    GM.setClipboard
+// @grant window.close
+// @grant window.focus
 // ==/UserScript==
 
 let dataOfGalaxy = {}
 let asteroids = {}
+let autoFarm = 0
 
 const settings = {
   galaxy: {
@@ -150,6 +154,8 @@ async function runScript() {
 	let serialize = await GM.getValue('asteroids', '{}');
   asteroids = JSON.parse(serialize)
 
+  autoFarm = await GM.getValue('auto-farm', 0);
+  
   console.log("asteroids", asteroids)
   
   $('#left-menu-1').append(`
@@ -359,7 +365,7 @@ async function runScript() {
         let serializeObj = JSON.stringify(data);
         await GM.setValue('galaxy', serializeObj);
         
-        alert("Gracz oznaczony jako słaba farma")
+        alert("Gracz oznaczony jako Dobra farma")
       })()
     	
   })
@@ -382,13 +388,24 @@ async function runScript() {
         let serializeObj = JSON.stringify(data);
         await GM.setValue('galaxy', serializeObj);
         
-        alert("Gracz oznaczony jako słaba farma")
+        alert("Gracz oznaczony jako neutralna farma")
       })()
     	
   })
   
+  $(document).on('click', '[data-auto-farm]', function(event) {
+    	(async() => {    
+	      await GM.setValue('auto-farm', 1);
+        
+        let element = $('[data-allow-auto-farm]').eq(0)
+          
+        $(element).removeAttr('data-allow-auto-farm').trigger('click')
+      })();
+  })
+  
   let isGalaxyPage = location.pathname == "/galaxy"
   let isMessagePage = location.pathname == "/messages"
+  let isFleetPage = location.pathname == "/fleet"
   
   if (isGalaxyPage) {
     setInterval(function() {
@@ -402,6 +419,35 @@ async function runScript() {
         utils_UpdateCombatMessages()
       })()
     }, 1000)
+  }
+  
+  if (isFleetPage) {
+    
+    switch(autoFarm) {
+      case 2:
+	      let a = 1;
+        await GM.setValue('auto-farm', 0);
+    		window.open('', '_self', '');
+    		window.close();
+      break;
+      
+      case 1:
+        console.log('auto farm')
+        await GM.setValue('auto-farm', 2);
+
+        let parent = $('[data-ship-type="LIGHT_CARGO"]').parent()
+        let element = $('input', parent).val(40_000)
+
+        $('#btn-next-fleet2').removeClass('disabled')
+
+        $('#btn-next-fleet2')[0].click();
+        $('#btn-next-fleet3')[0].click();
+
+        setTimeout(function() {
+     		  $('#btn-submit-fleet')[0].click();
+        }, 1000)
+    	break;
+    }
   }
 }
 
@@ -443,7 +489,7 @@ async function utils_UpdateCombatMessages() {
     
     if (isNormalFarm || farm.isLowFarm === true) {
       content += `
-    		<a href="#" class="item-low-farm" data-galaxy="` + split[0] + `" data-system="` + split[1] + `" data-position="` + split[2] + `" style="color: lime">Oznacz jako dobra farma</a>
+    		<a href="#" class="item-high-farm" data-galaxy="` + split[0] + `" data-system="` + split[1] + `" data-position="` + split[2] + `" style="color: lime">Oznacz jako dobra farma</a>
       `
     }
     
@@ -533,7 +579,7 @@ function utils_UpdateGalaxySystem() {
 			
       let cords = galaxy + ":" + system + ":" + position
       let now = new Date()
-      let item = dataOfGalaxy[cords] ? dataOfGalaxy[cords] : {
+      let item = typeof dataOfGalaxy[cords] != 'undefined' ? dataOfGalaxy[cords] : {
       	last_attack: undefined,
         isLowFarm: undefined
       }
@@ -625,7 +671,8 @@ async function drawIdlers() {
     let isUnmark = (typeof item.isLowFarm == "undefined")
     let isMark = !isUnmark
     let hasDebris = item.debris.metal != 0 || item.debris.crystal != 0
-        
+    let allowAutoFarm = false;
+    
     switch(true) {
       case hasDebris: highlight = "pink"; break;
         
@@ -633,13 +680,13 @@ async function drawIdlers() {
       case isUnmark && hasTimer: highlight = 'orange'; break; 
         
       // Nie oznaczony i nie posiada timera
-      case isUnmark && !hasTimer: highlight = 'lime'; break; 
+      case isUnmark && !hasTimer: highlight = 'lime'; allowAutoFarm = true; break; 
         
       // Oznaczony jako słaba farma
       case isMark && item.isLowFarm === true: highlight = 'red'; break;
         
       // Oznaczony jako dobra farma i nie posiada timer'a
-      case isMark && item.isLowFarm === false && !hasTimer: highlight = 'gold'; break;
+      case isMark && item.isLowFarm === false && !hasTimer: highlight = 'gold'; allowAutoFarm = true; break;
         
       // Oznaczony jako dobra farma i posiada timer'a
       case isMark && item.isLowFarm === false && hasTimer: highlight = 'orange'; break;
@@ -648,7 +695,7 @@ async function drawIdlers() {
     content += `
     	<li>
             <a href="fleet?x=` + item.galaxy + `&y=` + item.system + `&z=` + item.position + `&planet=1&mission=8" class="attack-item" data-galaxy="` + item.galaxy + `" data-system="` + item.system + `" data-position="` + item.position + `">
-            	<span style="font-size: 8px; color: ` + highlight + `">
+            	<span style="font-size: 8px; color: ` + highlight + `" ` + (allowAutoFarm ? 'data-allow-auto-farm="1"' : '') + `>
               	` + item.ranking + ` - ` + item.cords + ` ` + (lastAttackInSeconds > 0 && lastAttackInSeconds < 60 * 60 ? '- last attack: ' + secondsToReadable(lastAttackInSeconds) : '') + `
                 </span>
             </a>
@@ -664,6 +711,11 @@ async function drawIdlers() {
   $('#galaxy-container').append(`
   	<div id="yourfrog-idlers" style="padding: 20px;">
     	<h5>Idlers</h5>
+      
+      <center>
+      	<a href="#auto-farm" data-auto-farm="1" style="color: white;" id="auto-farm">Auto Farm</a>
+      </center>
+      
       <ul style="float: right">
       	<li>Legenda kolorów</li>
 	      <li><span style="font-size: 7px; color:lime">Dawno nie atakowany</span></li>
