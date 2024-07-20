@@ -43,6 +43,10 @@ const settings = {
 
 let scanerHandler = null;
 
+function utils_getCurrentCoordinates() {
+	return $('a.planet-select.selected span.planet-coords').clone().children().remove().end().text().trim();  
+}
+
 /**
  *	Sprawdzenie czy w układzie znajduje się asteroida
  */
@@ -294,6 +298,49 @@ async function runScript() {
       })()
   })
   
+  
+  $(document).on('click', '[data-auto-farm]', function(event) {
+    	let mainElement = $(this)
+    
+        let max = 35 - $('#fleet-movement-detail-btn span:contains("Own")').text().split(' ')[0]
+        let interval = 7_000
+      
+        let sortList = $($('.attack-item[data-allow-auto-farm]').toArray().sort(function(a, b) {
+          let aVal = parseInt(a.getAttribute('data-distance'));
+          let bVal = parseInt(b.getAttribute('data-distance'));
+          
+          return aVal - bVal;
+        })).getRange(0, max).reverse();
+        
+        for(let i = 0; i < max; i++) {
+          setTimeout(function() {        
+		     		$(mainElement).css('color', 'orange').text("Auto Farm (" + (max - i) + ")");
+                                                   
+            (async() => { 
+                  await GM.setValue('auto-farm', 1);
+                  let element = $(sortList).eq(i)//$('.attack-item[data-allow-auto-farm]').eq(0)          
+
+                  $(element).removeAttr('data-allow-auto-farm')
+                  $(element).trigger('click')
+                
+          	})();
+          }, i * interval)
+        }
+    
+//     function getSorted(selector, attrName) {
+//       return $($(selector).toArray().sort(function(a, b){
+//         var aVal = parseInt(a.getAttribute(attrName)),
+//             bVal = parseInt(b.getAttribute(attrName));
+//         return aVal - bVal;
+//       }));
+//     }
+    
+        setTimeout(function() {
+          console.log(mainElement)
+          $(mainElement).css('color', 'white')
+        }, max * interval)
+  })
+  
   $(document).on('click', '.attack-item', function(event) {
     	event.preventDefault();
     	
@@ -314,6 +361,8 @@ async function runScript() {
         $('span', this).css('color', 'orange');
 
         let url = $(this).attr('href')
+        console.log("open url: " + url)
+        window.focus()
         window.open(url, '_blank').focus();
         
         let serializeObj = JSON.stringify(data);
@@ -391,16 +440,6 @@ async function runScript() {
         alert("Gracz oznaczony jako neutralna farma")
       })()
     	
-  })
-  
-  $(document).on('click', '[data-auto-farm]', function(event) {
-    	(async() => {    
-	      await GM.setValue('auto-farm', 1);
-        
-        let element = $('[data-allow-auto-farm]').eq(0)
-          
-        $(element).removeAttr('data-allow-auto-farm').trigger('click')
-      })();
   })
   
   let isGalaxyPage = location.pathname == "/galaxy"
@@ -692,10 +731,18 @@ async function drawIdlers() {
       case isMark && item.isLowFarm === false && hasTimer: highlight = 'orange'; break;
     }
     
+    let currentSystem = utils_getCurrentCoordinates().split(":")[1]
+    
+    let distance = Math.abs(item.system - currentSystem)
+    
+    let attribute = ""
+    
+    attribute += ` data-distance="` + distance + `"`
+    
     content += `
     	<li>
-            <a href="fleet?x=` + item.galaxy + `&y=` + item.system + `&z=` + item.position + `&planet=1&mission=8" class="attack-item" data-galaxy="` + item.galaxy + `" data-system="` + item.system + `" data-position="` + item.position + `">
-            	<span style="font-size: 8px; color: ` + highlight + `" ` + (allowAutoFarm ? 'data-allow-auto-farm="1"' : '') + `>
+            <a href="fleet?x=` + item.galaxy + `&y=` + item.system + `&z=` + item.position + `&planet=1&mission=8" class="attack-item" ` + attribute  + ` data-galaxy="` + item.galaxy + `" data-system="` + item.system + `" data-position="` + item.position + `"  ` + (allowAutoFarm ? 'data-allow-auto-farm="1"' : '') + `>
+            	<span style="font-size: 8px; color: ` + highlight + `">
               	` + item.ranking + ` - ` + item.cords + ` ` + (lastAttackInSeconds > 0 && lastAttackInSeconds < 60 * 60 ? '- last attack: ' + secondsToReadable(lastAttackInSeconds) : '') + `
                 </span>
             </a>
@@ -787,3 +834,15 @@ function secondsToReadable(value) {
   
   return hours.toString().padStart(2, '0') + ":" + minutes.toString().padStart(2, '0') + ":" + seconds.toString().padStart(2, '0')
 }
+
+(function($) {
+  //function that gets a range of dom elements against a jQuery selector
+  //returns an array of dom elements
+  $.fn.getRange = function(start, end) {
+    var elems = [];
+    for (var i = start; i <= end; i++) {
+      elems.push(this.get(i));
+    }
+    return elems;
+  };
+})(jQuery);
