@@ -6,6 +6,7 @@
 // @include  *hyper.ogamex.net/hangar*
 // @include  *hyper.ogamex.net/defense*
 // @include  *hyper.ogamex.net/research*
+// @include  *hyper.ogamex.net/empire*
 // @include  *hyper.ogamex.net/building/facility*
 // @include  *hyper.ogamex.net/building/resource*
 // @include  *https://hyper.ogamex.net/fleet/distributeresources*
@@ -14,7 +15,57 @@
 // @grant           GM.getValue
 // ==/UserScript==
 
+/************************************************/
+/*                                              */
+/*					=== Stałe, nie ruszać ===						*/
+/*																							*/
+/************************************************/
+const TYPE_PLANET = 0
+const TYPE_MOON = 1
+
+const STATE_NOTHING = 0
+const STATE_GO_TO_DISTRIBUTE = 1
+const STATE_AUTOMATIC_SEND_RESOURCE = 2
+const STATE_NO_DATA = 3
+const STATE_READ_FROM_EMPIRE = 4
+const STATE_MOVE_TO_TAB_ON_PLANET = 5
+
+/************************************************/
+/*                                              */
+/*						=== Konfiguracja ===							*/
+/*																							*/
+/************************************************/
+const config = {
+  
+  /************************************************/
+  /*                                              */
+  /*						=== Dystrybucja ===							 	*/
+  /*																							*/
+  /************************************************/
+	distribute: {
+  	// True - Wysyłaj automatycznie po kliknięciu guzika na kopalni, False - Jedynie zapamiętaj surowce
+    automatically: true,
+    
+    // Dane planety z której następuje automatyczne rozsyłanie surowców
+  	from: {
+      // Współrzędne planety, Format: {system}:{układ}:{pozycja}
+  		coordinates: "1:145:4", 
+      
+      // Enum: TYPE_PLANET, TYPE_MOON
+  		type: TYPE_PLANET
+		}
+	}
+}
+
+////
+// Allow state:
+// - 0 -> Nothing
+// - 1 -> Go to Distribute
+// - 2 -> Automatic send resource when have
+let state = 0
+
 let planets = {}
+let empire = {}
 
 function utils_getCurrentCoordinates() {
 	return $('a.planet-select.selected span.planet-coords').clone().children().remove().end().text().trim();  
@@ -63,14 +114,149 @@ function updateResourceInformation() {
     },
     updateAt: (new Date()).getTime()
   }
+  
+}
+
+
+async function state_reset() {
+  await GM.setValue('script_state', STATE_NOTHING);
+}
+
+async function state_set(value) {
+  await GM.setValue('script_state', value);
+  
+}
+
+async function state_get() {
+  return await GM.getValue('script_state', STATE_NOTHING);
+}
+
+async function empire_load() {
+  let serialize = await GM.getValue('empire', '{}');
+  let obj = JSON.parse(serialize)
+  
+  console.log("empire_load", serialize, obj)
+  return obj
+}
+
+async function empire_save() {
+  await GM.setValue('empire', JSON.stringify(empire));
+}  
+
+/**
+ *	Przejście na stronę z automatycznym ustawieniem stanu skryptu
+ */
+async function goToPage(pathname, scriptState) {
+  
+  if (typeof scriptState == "undefined") {
+    scriptState = STATE_NOTHING
+  }
+  
+  state_set(scriptState)
+  window.location = pathname
+}
+
+/**
+ *	Załadowanie surowców i wysłanie ich do zapamiętanej planety
+ */
+async function distributeLoad() {
+  let serialize = await GM.getValue('distribute-save');
+  let obj = JSON.parse(serialize)
+
+  $('span:contains("Heavy Cargo")').trigger("click");
+
+  unsafeWindow.AutoNumeric.getAutoNumericElement('#resource-input-metal').set(obj.metal);
+  unsafeWindow.AutoNumeric.getAutoNumericElement('#resource-input-crystal').set(obj.crystal);
+  unsafeWindow.AutoNumeric.getAutoNumericElement('#resource-input-deuterium').set(obj.deuter);
+
+  $('#distribute-resources-container .right-side span:contains("' + obj.cords + '")').eq(0).trigger("click")
+
+  setTimeout(() => {
+    $('#distribute-resources-container .right-side #btnSend')[0].click();
+  }, 500);
+}
+
+  
+/**
+ *	Pobiera uchwyt do elementu "a" służącego jako przejście na planetę / moon
+ */
+function getPlanetOrMoonElement(coordinate, type) {
+	let result = null
+  
+  switch(type) {
+    case TYPE_PLANET:
+      	result = $('span.planet-coords:contains("' + coordinate + '")')
+      break;
+      
+    case TYPE_MOON:
+        result = $('span.planet-coords:contains("' + coordinate + '")').parent().parent().find('.moon-select')
+      break;
+  }
+
+  console.log(coordinate, type, result)
+  if (result == null || result.length == 0) {
+   	return null;
+  }
+
+  return result;
+}
+
+/**
+ *	Przenosi do zakładki z wybraną planetą
+ */
+async function moveToTabOnSpecificPlanet(coordinate, pathname) {
+  state_set(STATE_MOVE_TO_TAB_ON_PLANET)
+  await GM.setValue('script_pathname', pathname);
+  
+  let element = getPlanetOrMoonElement(coordinate, TYPE_PLANET);
+  
+  element[0].click()
 }
 
 /**
  *	Uruchomienie skryptu
  */
 async function runScript() {
+  state = await GM.getValue('script_state', '{}');
+  empire = await empire_load()
+  
+  switch(state) {
+    case STATE_GO_TO_DISTRIBUTE: 
+      	goToPage("/fleet/distributeresources", STATE_AUTOMATIC_SEND_RESOURCE)
+	      return;
+      break;  
+      
+    case STATE_AUTOMATIC_SEND_RESOURCE:
+	      state_reset()
+      	distributeLoad()
+	      return
+      break;
+      
+    case STATE_NO_DATA:
+      	goToPage("/empire", STATE_READ_FROM_EMPIRE)
+      break
+      
+    case STATE_READ_FROM_EMPIRE:
+	      runScript_Empire()
+      	goToPage("/home", STATE_NOTHING)
+      break
+      
+    case STATE_MOVE_TO_TAB_ON_PLANET:
+      	let pathname = await GM.getValue('script_pathname', '/home');
+      	goToPage(pathname, STATE_NOTHING)
+      break;
+  }
+  
+  
+  
+  let isEmpirePage = location.pathname == "/empire"
   let isHomePage = location.pathname == "/home"
   let isResourcePage = location.pathname == "/building/resource"
+  
+  if (isEmpirePage) {
+	  runScript_Empire()
+    return
+  }
   
 	let jsonSerialize = await GM.getValue('planets', '{}');
   planets = JSON.parse(jsonSerialize)
@@ -85,9 +271,25 @@ async function runScript() {
    	runScript_Resource() 
   }
   
-  console.log("YourFrog - Run 1");
+  let now = (new Date()).getTime()
+  
+  console.log(now - empire.updateAt, now, empire.updateAt, typeof empire.updateAt == 'undefined', empire)
+  if (typeof empire.updateAt == 'undefined' || now - empire.updateAt >= 5 * 60 * 1000) {
+    $('#left-menu-1').prepend(`
+        <div class="menu-item">
+          <a href="#" class="text-item" style="font-size: 8px;color: orange" id="yourfrog-distribute-refresh">Distribute refresh</a>
+        </div>
+    `)
+  }
+  
+  
+  $(document).on('click', '#yourfrog-distribute-refresh', function() { 
+    (async() => {
+      	goToPage("/empire", STATE_READ_FROM_EMPIRE)
+    })()
+  })
+  
 	YourFrogTiming(unsafeWindow.resources);
-  console.log("YourFrog - Finish");
   
   
   $(document).on('click', '.yourfrog-distribute-save', function() {
@@ -104,7 +306,20 @@ async function runScript() {
     
 	    (async() => {
         await GM.setValue('distribute-save', serialize);
-        alert("zapisano!")
+        
+        if (config.distribute.automatically) {
+          let element = getPlanetOrMoonElement(config.distribute.from.coordinates, config.distribute.from.type);
+          
+          console.log('aaa', element)
+          if (element == null) {
+          	alert('Błędna konfiguracja. Sprawdź współrzędne oraz typ.');
+          } else {
+        		await GM.setValue('script_state', STATE_GO_TO_DISTRIBUTE);
+            element[0].click();
+          }
+        } else {
+          alert('Zapamiętano brakującą ilość surowców')
+        }
       })()
   });
   
@@ -144,22 +359,21 @@ async function runScript() {
   
   $(document).on('click', '.yourfrog-distribute-load', function() {     
 	    (async() => {
-        let serialize = await GM.getValue('distribute-save');
-        let obj = JSON.parse(serialize)
-        
-	    	$('span:contains("Heavy Cargo")').trigger("click");
-        
-        unsafeWindow.AutoNumeric.getAutoNumericElement('#resource-input-metal').set(obj.metal);
-        unsafeWindow.AutoNumeric.getAutoNumericElement('#resource-input-crystal').set(obj.crystal);
-        unsafeWindow.AutoNumeric.getAutoNumericElement('#resource-input-deuterium').set(obj.deuter);
-        
-        $('#distribute-resources-container .right-side span:contains("' + obj.cords + '")').eq(0).trigger("click")
-        
-        setTimeout(() => {
-	        $('#distribute-resources-container .right-side #btnSend')[0].click();
-        }, 500);
+        distributeLoad()
       })()
   });  
+  
+  
+  $(document).on('click', '.yourfrog-energy-icon', function(event) {   
+    event.preventDefault();
+    
+	    (async() => {
+      	let coordinate = $(this).attr('data-coordinate')
+        
+				moveToTabOnSpecificPlanet(coordinate, "/hangar")
+//        distributeLoad()
+      })()
+  }); 
   
   await GM.setValue('planets', JSON.stringify(planets));
   
@@ -188,6 +402,10 @@ async function runScript() {
     })
     
   }, 1000)
+  
+  
+  
+  unsafeWindow.ConfigureTooltips();
 }
 
 async function runScript_Resource() {
@@ -359,6 +577,32 @@ async function YourFrogAddMineLevelsToPlanets() {
   }  
 }
 
+
+function YourFrogGetEnergyIcon(coordinate) {
+  let data = empire.planets[coordinate]
+
+  if (data.energy < 0) {
+    return `
+        <i class="fas fa-exclamation-triangle tooltip yourfrog-energy-icon" data-coordinate="` + coordinate + `" data-tooltip-position="top" style="color: #CCC;padding: 2px 5px;border-radius: 3px;color: red;position: absolute; right: 0px; top: 0px;" data-tooltip-content="<div style='font-size:11px;color:#DDD;'>Brakuje energi: ` + data.energy + `</div>"></i>
+    `
+  }
+    
+  return ''
+}
+
+function YourFrogGetFieldsIcon(coordinate) {
+  let data = empire.planets[coordinate]
+  let left = data.fields.max - data.fields.current 
+      
+  if (left <= 3) {
+    return `
+        <i class="fas fa-exclamation-triangle tooltip yourfrog-fields-icon" data-coordinate="` + coordinate + `" data-tooltip-position="top" style="color: #CCC;padding: 2px 5px;border-radius: 3px;color: red;position: absolute; right: 0px; top: 0px;" data-tooltip-content="<div style='font-size:11px;color:#DDD;'>Pozostało ` + left + ` pól</div>"></i>
+    `
+  }
+    
+  return ''
+}
+
 function YourFrogAddMineLevelsToPlanet(showWarning, cords, levels, resources, minimumLevels, construction) {
 	let upgrade = extractUpgradeInformation()[cords]
   if (typeof upgrade === 'undefined' || typeof upgrade.isBuildingUpgrade === 'undefined') { return }
@@ -381,6 +625,8 @@ function YourFrogAddMineLevelsToPlanet(showWarning, cords, levels, resources, mi
   
   let warningContent = ''
   let constructionContent = ''
+  let energyIconContent = YourFrogGetEnergyIcon(cords)
+  let fieldsIconContent = YourFrogGetFieldsIcon(cords)
   
   if (showWarning) {
    	warningContent = `
@@ -429,6 +675,8 @@ function YourFrogAddMineLevelsToPlanet(showWarning, cords, levels, resources, mi
 	// Dodanie informacji o misji
 	$('#other-planets .planet-item .planet-coords:contains("' + cords + '")').append(`
   <div>
+  	` + energyIconContent + `
+  	` + fieldsIconContent + `
   	` + warningContent + `
   	<span style="color: ` + colors.metal + (colors.metal == "gold" ? ';font-weight: bold;' : '') + `">` + levels.metal + (isMetalUpgrade ? " -> " + upgrade.buildingData.toLevel : "" ) + `</span>
   	<span style="color: ` + colors.crystal + (colors.crystal == "gold" ? ';font-weight: bold;' : '') + `">` + levels.crystal + (isCrystalUpgrade ? " -> " + upgrade.buildingData.toLevel : "" )  + `</span>
@@ -606,6 +854,59 @@ function YourFrogTiming(resources) {
   
 }
 
+async function runScript_Empire() {
+	console.log("Resource::runScript_Empire")
+  
+  let planets = {}
+  
+  // Read planet information
+  $('.planetViewContainer > div:eq(0) .col:not(.header):not(:first)').each(function(index) {
+    let columnIndex = 2 + index
+    let data = {
+        coordinate: $('.planet-coords', this).text(), //.clearCoordinate(),
+        energy: $('.planet-energy-value', this).text().toInteger(),
+      	fields: {
+          current: $('.planet-fields', this).text().split('/')[0].toInteger(),
+          max: $('.planet-fields', this).text().split('/')[1].toInteger()
+        },
+        resource: {
+          metal: $('.planetViewContainer .prop-row:eq(0) .col:eq(' + columnIndex + ') .cell-value:eq(0)').text().toInteger(),
+          crystal: $('.planetViewContainer .prop-row:eq(0) .col:eq(' + columnIndex + ') .cell-value:eq(1)').text().toInteger(),
+          deuter: $('.planetViewContainer .prop-row:eq(0) .col:eq(' + columnIndex + ') .cell-value:eq(2)').text().toInteger(),
+        },
+        production: {
+          metal: $('.planetViewContainer .prop-row:eq(1) .col:eq(' + columnIndex + ') .cell-value:eq(0)').text().toInteger(),
+          crystal: $('.planetViewContainer .prop-row:eq(1) .col:eq(' + columnIndex + ') .cell-value:eq(0)').text().toInteger(),
+          deuter: $('.planetViewContainer .prop-row:eq(1) .col:eq(' + columnIndex + ') .cell-value:eq(0)').text().toInteger(),
+        },
+    }
+
+    planets[data.coordinate] = data
+  })
+  
+  empire = {
+    updateAt: (new Date()).getTime(),
+    planets: planets,
+    all: {
+      resource: {
+      	metal: $('.planetViewContainer .prop-row:eq(0) .col:eq(1) .cell-value:eq(0)').text().toInteger(),
+      	crystal: $('.planetViewContainer .prop-row:eq(0) .col:eq(1) .cell-value:eq(0)').text().toInteger(),
+      	deuter: $('.planetViewContainer .prop-row:eq(0) .col:eq(1) .cell-value:eq(0)').text().toInteger(),
+      },
+      production: {
+      	metal: $('.planetViewContainer .prop-row:eq(1) .col:eq(1) .cell-value:eq(0)').text().toInteger(),
+      	crystal: $('.planetViewContainer .prop-row:eq(1) .col:eq(1) .cell-value:eq(0)').text().toInteger(),
+      	deuter: $('.planetViewContainer .prop-row:eq(1) .col:eq(1) .cell-value:eq(0)').text().toInteger(),
+      },
+    },
+    research: {}
+  }
+  
+  console.log('Empire data', empire)
+  empire_save()
+}
+
+
 function secondsToReadable(value) {
   let hours = Math.floor(value / 3600);
 	let totalSeconds = value % 3600;
@@ -614,6 +915,18 @@ function secondsToReadable(value) {
   
   return hours.toString().padStart(2, '0') + ":" + minutes.toString().padStart(2, '0') + ":" + seconds.toString().padStart(2, '0')
 }
+
+Object.assign(String.prototype, {
+  clearCoordinate() {
+    return this.replaceAll('[', '').replaceAll(']', '')
+  },
+  
+  toInteger() {
+    let normalize = this.replaceAll('.', '')
+    
+  	return parseInt(normalize)
+	}
+})
 
 $(document).ready(function() {
   (async() => {

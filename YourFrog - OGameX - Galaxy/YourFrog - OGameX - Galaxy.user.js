@@ -31,7 +31,7 @@ const settings = {
         }
     },
     farm: {
-     	minimum_ranking: 1800 
+     	minimum_ranking: 1700 
     }
   },
   colors: {
@@ -302,30 +302,34 @@ async function runScript() {
   $(document).on('click', '[data-auto-farm]', function(event) {
     	let mainElement = $(this)
     
-        let max = 35 - $('#fleet-movement-detail-btn span:contains("Own")').text().split(' ')[0]
-        let interval = 7_000
-      
-        let sortList = $($('.attack-item[data-allow-auto-farm]').toArray().sort(function(a, b) {
-          let aVal = parseInt(a.getAttribute('data-distance'));
-          let bVal = parseInt(b.getAttribute('data-distance'));
-          
-          return aVal - bVal;
-        })).getRange(0, max).reverse();
-        
-        for(let i = 0; i < max; i++) {
-          setTimeout(function() {        
-		     		$(mainElement).css('color', 'orange').text("Auto Farm (" + (max - i) + ")");
-                                                   
-            (async() => { 
-                  await GM.setValue('auto-farm', 1);
-                  let element = $(sortList).eq(i)//$('.attack-item[data-allow-auto-farm]').eq(0)          
+      let max = 35 - $('#fleet-movement-detail-btn span:contains("Own")').text().split(' ')[0]
+      let interval = 5_000
 
-                  $(element).removeAttr('data-allow-auto-farm')
-                  $(element).trigger('click')
-                
-          	})();
-          }, i * interval)
-        }
+      let sortList = $($('.attack-item[data-allow-auto-farm]').toArray().sort(function(a, b) {
+        let aVal = parseInt(a.getAttribute('data-distance'));
+        let bVal = parseInt(b.getAttribute('data-distance'));
+
+        return aVal - bVal;
+      })).getRange(0, max).reverse();
+        
+ 	    //Zabezpieczenie przed próbą obróbki zbyt dużej ilości linków
+    	max = Math.min(max, sortList.length);
+    
+    console.log(sortList)
+      for(let i = 0; i < max; i++) {
+        setTimeout(function() {        
+          $(mainElement).css('color', 'orange').text("Auto Farm (" + (max - i) + ")");
+
+          (async() => { 
+            await GM.setValue('auto-farm', 1);
+            let element = $(sortList).eq(i)//$('.attack-item[data-allow-auto-farm]').eq(0)          
+
+            $(element).removeAttr('data-allow-auto-farm')
+            $(element).trigger('click')
+
+          })();
+        }, i * interval)
+      }
     
 //     function getSorted(selector, attrName) {
 //       return $($(selector).toArray().sort(function(a, b){
@@ -491,6 +495,20 @@ async function runScript() {
 }
 
 $(document).ready(function() {
+  
+
+(function($) {
+  //function that gets a range of dom elements against a jQuery selector
+  //returns an array of dom elements
+  $.fn.getRange = function(start, end) {
+    var elems = [];
+    for (var i = start; i <= end; i++) {
+      elems.push(this.get(i));
+    }
+    return elems;
+  };
+})(jQuery);
+  
   (async() => {
     let serialize = await GM.getValue('galaxy', '{}');
     dataOfGalaxy = JSON.parse(serialize)
@@ -706,7 +724,9 @@ async function drawIdlers() {
 //     if (lastAttackInSeconds > 0) { highlight = "orange" }
 //     if (lastAttackInSeconds >= 60 * 60) { highlight = "lime" }
     
-    let hasTimer = lastAttackInSeconds > 0 && lastAttackInSeconds < 60 * 60
+    let maximumTimeForTimer = 2 * 60 * 60
+    
+    let hasTimer = lastAttackInSeconds > 0 && lastAttackInSeconds < maximumTimeForTimer
     let isUnmark = (typeof item.isLowFarm == "undefined")
     let isMark = !isUnmark
     let hasDebris = item.debris.metal != 0 || item.debris.crystal != 0
@@ -743,7 +763,7 @@ async function drawIdlers() {
     	<li>
             <a href="fleet?x=` + item.galaxy + `&y=` + item.system + `&z=` + item.position + `&planet=1&mission=8" class="attack-item" ` + attribute  + ` data-galaxy="` + item.galaxy + `" data-system="` + item.system + `" data-position="` + item.position + `"  ` + (allowAutoFarm ? 'data-allow-auto-farm="1"' : '') + `>
             	<span style="font-size: 8px; color: ` + highlight + `">
-              	` + item.ranking + ` - ` + item.cords + ` ` + (lastAttackInSeconds > 0 && lastAttackInSeconds < 60 * 60 ? '- last attack: ' + secondsToReadable(lastAttackInSeconds) : '') + `
+              	` + item.ranking + ` - ` + item.cords + ` ` + (lastAttackInSeconds > 0 && lastAttackInSeconds < maximumTimeForTimer ? '- last attack: ' + secondsToReadable(lastAttackInSeconds) : '') + `
                 </span>
             </a>
             
@@ -834,15 +854,3 @@ function secondsToReadable(value) {
   
   return hours.toString().padStart(2, '0') + ":" + minutes.toString().padStart(2, '0') + ":" + seconds.toString().padStart(2, '0')
 }
-
-(function($) {
-  //function that gets a range of dom elements against a jQuery selector
-  //returns an array of dom elements
-  $.fn.getRange = function(start, end) {
-    var elems = [];
-    for (var i = start; i <= end; i++) {
-      elems.push(this.get(i));
-    }
-    return elems;
-  };
-})(jQuery);
