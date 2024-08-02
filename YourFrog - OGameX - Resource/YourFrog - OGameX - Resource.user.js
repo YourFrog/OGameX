@@ -7,10 +7,13 @@
 // @include  *hyper.ogamex.net/defense*
 // @include  *hyper.ogamex.net/research*
 // @include  *hyper.ogamex.net/empire*
+// @include  *hyper.ogamex.net/fleet*
 // @include  *hyper.ogamex.net/building/facility*
 // @include  *hyper.ogamex.net/building/resource*
 // @include  *https://hyper.ogamex.net/fleet/distributeresources*
 // @require https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js 
+// @updateURL 
+// @version 1
 // @grant           GM.setValue
 // @grant           GM.getValue
 // ==/UserScript==
@@ -49,7 +52,8 @@ const config = {
     // Dane planety z której następuje automatyczne rozsyłanie surowców
   	from: {
       // Współrzędne planety, Format: {system}:{układ}:{pozycja}
-  		coordinates: "1:145:4", 
+//   		coordinates: "1:145:8", 
+  		coordinates: "1:287:9", 
       
       // Enum: TYPE_PLANET, TYPE_MOON
   		type: TYPE_PLANET
@@ -135,7 +139,6 @@ async function empire_load() {
   let serialize = await GM.getValue('empire', '{}');
   let obj = JSON.parse(serialize)
   
-  console.log("empire_load", serialize, obj)
   return obj
 }
 
@@ -164,15 +167,26 @@ async function distributeLoad() {
   let obj = JSON.parse(serialize)
 
   $('span:contains("Heavy Cargo")').trigger("click");
+  $('span:contains("Light Cargo")').trigger("click");
 
-  unsafeWindow.AutoNumeric.getAutoNumericElement('#resource-input-metal').set(obj.metal);
-  unsafeWindow.AutoNumeric.getAutoNumericElement('#resource-input-crystal').set(obj.crystal);
-  unsafeWindow.AutoNumeric.getAutoNumericElement('#resource-input-deuterium').set(obj.deuter);
+  unsafeWindow.AutoNumeric.getAutoNumericElement('#resource-input-metal').set(parseInt(obj.metal) + 10);
+  unsafeWindow.AutoNumeric.getAutoNumericElement('#resource-input-crystal').set(parseInt(obj.crystal) + 10);
+  unsafeWindow.AutoNumeric.getAutoNumericElement('#resource-input-deuterium').set(parseInt(obj.deuter) + 10);
 
   $('#distribute-resources-container .right-side span:contains("' + obj.cords + '")').eq(0).trigger("click")
 
   setTimeout(() => {
     $('#distribute-resources-container .right-side #btnSend')[0].click();
+    
+    setTimeout(() => {
+      let isSuccess = $('.x-planet-fleet-success:visible').length == 1
+      
+      if (isSuccess) {
+        goToPage("/building/resource", STATE_NOTHING)
+      } else {
+       	alert('Nie wysłano surowców') 
+      }
+    }, 1000)
   }, 500);
 }
 
@@ -193,7 +207,6 @@ function getPlanetOrMoonElement(coordinate, type) {
       break;
   }
 
-  console.log(coordinate, type, result)
   if (result == null || result.length == 0) {
    	return null;
   }
@@ -273,7 +286,6 @@ async function runScript() {
   
   let now = (new Date()).getTime()
   
-  console.log(now - empire.updateAt, now, empire.updateAt, typeof empire.updateAt == 'undefined', empire)
   if (typeof empire.updateAt == 'undefined' || now - empire.updateAt >= 5 * 60 * 1000) {
     $('#left-menu-1').prepend(`
         <div class="menu-item">
@@ -310,7 +322,6 @@ async function runScript() {
         if (config.distribute.automatically) {
           let element = getPlanetOrMoonElement(config.distribute.from.coordinates, config.distribute.from.type);
           
-          console.log('aaa', element)
           if (element == null) {
           	alert('Błędna konfiguracja. Sprawdź współrzędne oraz typ.');
           } else {
@@ -367,12 +378,19 @@ async function runScript() {
   $(document).on('click', '.yourfrog-energy-icon', function(event) {   
     event.preventDefault();
     
-	    (async() => {
-      	let coordinate = $(this).attr('data-coordinate')
-        
-				moveToTabOnSpecificPlanet(coordinate, "/hangar")
-//        distributeLoad()
-      })()
+    (async() => {
+      let coordinate = $(this).attr('data-coordinate')
+      moveToTabOnSpecificPlanet(coordinate, "/hangar")
+    })()
+  }); 
+  
+  $(document).on('click', '.yourfrog-fields-icon', function(event) {   
+    event.preventDefault();
+    
+    (async() => {
+      let coordinate = $(this).attr('data-coordinate')
+      moveToTabOnSpecificPlanet(coordinate, "/building/facility")
+    })()
   }); 
   
   await GM.setValue('planets', JSON.stringify(planets));
@@ -541,7 +559,6 @@ async function YourFrogAddMineLevelsToPlanets() {
     
   }
   
-  console.log("Minimum before: ", minimum)
   // Utrzymuj proporcje 4 - 0 - (-2)
   if (minimum.deuter + 2 < minimum.crystal) {
     minimum.metal = 0
@@ -556,8 +573,6 @@ async function YourFrogAddMineLevelsToPlanets() {
       minimum.deuter = 0
     }
   }
-  
-  console.log("Minimum after: ", minimum)
   
   for(cords in obj) {
     let data = obj[cords]
@@ -634,7 +649,6 @@ function YourFrogAddMineLevelsToPlanet(showWarning, cords, levels, resources, mi
     `
   } else {
     if (typeof construction  !== "undefined") {
-      console.log("construction", construction)
       let now = (new Date()).getTime()
 			let ageInSeconds = parseInt((now - construction.updateAt) / 1000)
       let leftInSeconds = construction.left - ageInSeconds
@@ -876,9 +890,19 @@ async function runScript_Empire() {
         },
         production: {
           metal: $('.planetViewContainer .prop-row:eq(1) .col:eq(' + columnIndex + ') .cell-value:eq(0)').text().toInteger(),
-          crystal: $('.planetViewContainer .prop-row:eq(1) .col:eq(' + columnIndex + ') .cell-value:eq(0)').text().toInteger(),
-          deuter: $('.planetViewContainer .prop-row:eq(1) .col:eq(' + columnIndex + ') .cell-value:eq(0)').text().toInteger(),
+          crystal: $('.planetViewContainer .prop-row:eq(1) .col:eq(' + columnIndex + ') .cell-value:eq(1)').text().toInteger(),
+          deuter: $('.planetViewContainer .prop-row:eq(1) .col:eq(' + columnIndex + ') .cell-value:eq(2)').text().toInteger(),
         },
+        storage: {
+          metal: $('.planetViewContainer .prop-row:eq(3) .col:eq(' + columnIndex + ') .cell-value:eq(5)').text().toInteger(),
+          crystal: $('.planetViewContainer .prop-row:eq(3) .col:eq(' + columnIndex + ') .cell-value:eq(6)').text().toInteger(),
+          deuter: $('.planetViewContainer .prop-row:eq(3) .col:eq(' + columnIndex + ') .cell-value:eq(7)').text().toInteger(),
+        },
+        buildings: {
+					metalMine: $('.planetViewContainer .prop-row:eq(3) .col:eq(' + columnIndex + ') .cell-value:eq(0)').text().toInteger(),
+          crystalMine: $('.planetViewContainer .prop-row:eq(3) .col:eq(' + columnIndex + ') .cell-value:eq(1)').text().toInteger(),
+          deuteriumRefinery: $('.planetViewContainer .prop-row:eq(3) .col:eq(' + columnIndex + ') .cell-value:eq(2)').text().toInteger(),
+        }
     }
 
     planets[data.coordinate] = data
@@ -890,19 +914,18 @@ async function runScript_Empire() {
     all: {
       resource: {
       	metal: $('.planetViewContainer .prop-row:eq(0) .col:eq(1) .cell-value:eq(0)').text().toInteger(),
-      	crystal: $('.planetViewContainer .prop-row:eq(0) .col:eq(1) .cell-value:eq(0)').text().toInteger(),
-      	deuter: $('.planetViewContainer .prop-row:eq(0) .col:eq(1) .cell-value:eq(0)').text().toInteger(),
+      	crystal: $('.planetViewContainer .prop-row:eq(0) .col:eq(1) .cell-value:eq(1)').text().toInteger(),
+      	deuter: $('.planetViewContainer .prop-row:eq(0) .col:eq(1) .cell-value:eq(2)').text().toInteger(),
       },
       production: {
       	metal: $('.planetViewContainer .prop-row:eq(1) .col:eq(1) .cell-value:eq(0)').text().toInteger(),
-      	crystal: $('.planetViewContainer .prop-row:eq(1) .col:eq(1) .cell-value:eq(0)').text().toInteger(),
-      	deuter: $('.planetViewContainer .prop-row:eq(1) .col:eq(1) .cell-value:eq(0)').text().toInteger(),
+      	crystal: $('.planetViewContainer .prop-row:eq(1) .col:eq(1) .cell-value:eq(1)').text().toInteger(),
+      	deuter: $('.planetViewContainer .prop-row:eq(1) .col:eq(1) .cell-value:eq(2)').text().toInteger(),
       },
     },
     research: {}
   }
   
-  console.log('Empire data', empire)
   empire_save()
 }
 

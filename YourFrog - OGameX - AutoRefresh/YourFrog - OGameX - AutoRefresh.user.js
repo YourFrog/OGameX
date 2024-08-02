@@ -104,7 +104,6 @@ async function startTimer() {
     
     
     if (isIgnorePlanet(item)) { 
-      console.log('ignore planet', item)
       continue 
     }
 

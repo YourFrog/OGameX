@@ -1,7 +1,6 @@
 // ==UserScript==
 // @name     YourFrog - OGameX - DarkPromote
 // @version  1
-// @include  *hyper.ogamex.net/darkmatter/promote*
 // @include  *hyper.ogamex.net/*
 // @require https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js 
 // @grant           GM.setValue
@@ -16,35 +15,90 @@ const settings = {
   }
 }
 
-let dateOfPromoteLinks = {}
+let data = {}
 
 $(document).ready(function() {
-  console.log('Run DarkPromote');
   
   (async() => {
-		let jsonSerialize = await GM.getValue('promote-links', '{}');
-  	dateOfPromoteLinks = JSON.parse(jsonSerialize)
+  	console.log('Run DarkPromote');
+		let jsonSerialize = await GM.getValue('data', '{"promoteLinks": {}, "importExport": {}}');
+  	data = JSON.parse(jsonSerialize)
     
+    console.log(data)
     runScript()
 
-    let serializeObj = JSON.stringify(dateOfPromoteLinks);
-    await GM.setValue('promote-links', serializeObj);
+    let serializeObj = JSON.stringify(data);
+    await GM.setValue('data', serializeObj);
   })()
 });
 
 
 async function runScript() {
   let isPromotePage = location.pathname == "/darkmatter/promote"
+	let isImportExportPage = location.pathname == "/merchant/importexport"
 
   if (isPromotePage) {
     runScript_PromotePage()
   }
   
-  if (typeof dateOfPromoteLinks.left === 'undefined' || typeof dateOfPromoteLinks.updateAt === 'undefined') { return }
-    
+  
+  if (isImportExportPage) {
+    runScript_ImportExportPage()
+  }
+  
+  addPromoteIfNeeded()
+  addImportExportIfNeeded()
+}
+
+async function runScript_PromotePage() {
+  let timers = $('.x-vote-time').map(function() {
+    return $(this).data('remaining-time');
+  })
+
+  let minimumTimers = Math.min(...timers)
+  
+  data.promoteLinks = {
+    left: minimumTimers,
+   	updateAt: (new Date()).getTime()
+  }
+}
+
+async function runScript_ImportExportPage() {
+  data.importExport = {
+    left: unsafeWindow.remainingSecondsToNextContainer,
+    isPurchased: unsafeWindow.isPurchased,
+   	updateAt: (new Date()).getTime()
+  }
+}
+
+function addImportExportIfNeeded() {
+  let item = data.importExport
+  
+  let now = (new Date()).getTime()
+  let leftInSeconds = item.left - (now - item.updateAt) / 1000
+  
+  let isVisible
+  
+  switch(true) {
+    case item.isPurchased && leftInSeconds > 0: isVisible = false; break;
+    case item.isPurchased && leftInSeconds < 0: isVisible = true; break;
+    case !item.isPurchased: isVisible = true; break;
+      
+  }
+  
+  if (isVisible) {
+  	addButton('Import / Export', '/merchant/importexport')  
+  }
+}
+
+
+function addPromoteIfNeeded() {
+  let item = data.promoteLinks
+  
+  if (typeof item.left === 'undefined' || typeof item.updateAt === 'undefined') { return }
     
   let now = (new Date()).getTime()
-  let leftInSeconds = dateOfPromoteLinks.left - (now - dateOfPromoteLinks.updateAt) / 1000 
+  let leftInSeconds = item.left - (now - item.updateAt) / 1000 
   
   let isVisible = false
   let label = ''
@@ -55,7 +109,7 @@ async function runScript() {
 	      isVisible = true    
       break;
     case leftInSeconds <= 0:
-	      label = "Take promote"
+	      label = "Take Promote"
 	      isVisible = true    
       break;
     default:
@@ -63,23 +117,14 @@ async function runScript() {
   }
   
   if (isVisible) {
-    $('#left-menu-1').prepend(`
-      <div class="menu-item btn-online-bonus">
-        <a href="/darkmatter/promote" class="text-item" style="font-size: 8px" >` + label + `</a>
-      </div>
-    `)
+    addButton(label, '/darkmatter/promote')
   }
 }
-
-async function runScript_PromotePage() {
-  let timers = $('.x-vote-time').map(function() {
-    return $(this).data('remaining-time');
-  })
-
-  let minimumTimers = Math.min(...timers)
   
-  dateOfPromoteLinks = {
-    left: minimumTimers,
-   	updateAt: (new Date()).getTime()
-  }
+function addButton(label, pathname) {
+  $('#left-menu-1').prepend(`
+      <div class="menu-item btn-online-bonus">
+        <a href="` + pathname + `" class="text-item" style="font-size: 8px" >` + label + `</a>
+      </div>
+	`)
 }
