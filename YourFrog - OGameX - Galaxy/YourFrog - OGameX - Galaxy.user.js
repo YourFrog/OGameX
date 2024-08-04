@@ -46,6 +46,9 @@ const settings = {
     slots: 47
   },
   galaxy: {
+    // Czy pokazywać pozycje gracza obok jego nicku
+    isShowPlayerRanking: true,
+    
     highlights: {
       	debris: {
           // Przy jakiej ilości metalu + kryształu podświetli sie pole (bez przelicznika 3:2:1)
@@ -59,13 +62,16 @@ const settings = {
         }
     },
     farm: {
-     	minimum_ranking: 1600,
+     	minimum_ranking: 1400,
       
       // Ile statków per slot
       ships: 150_000,
+      
+      // Pojemność jednej sztuki sztatku
+      capacity: 63_750,
 
       // Minimalna ilość surowców na farmie którą atakujemy
-      minimum_resource: 5_000_000_000
+      minimum_resource: 10_000_000_000
     },
     /************************************************/
     /*                                              */
@@ -74,7 +80,7 @@ const settings = {
     /************************************************/
     asteroid: {
       // Maksymalna ilość statków jaka może zostać wysłana
-      ships: 29_000_000,
+      ships: 40_000_000,
       
       // Maksymalna ilość misji w powietrzu
       maximumFleets: 5,
@@ -559,9 +565,30 @@ async function runScript() {
         setTimeout(function() {        
           $(mainElement).css('color', 'orange').text(labelCallback(max - i, allElements.length));
 
+          let element = $(sortList).eq(i)
+
+          let resource = $(element).data('resource')
+          let ships = parseInt(resource / settings.galaxy.farm.capacity / 2);
+              
+          switch(true) {
+            case resource == -1: ships = settings.galaxy.farm.ships; break;
+            case ships < 1_000: ships = 1_000; break;   
+            case ships < 50_000: ships = 50_000; break;
+            case ships < 100_000: ships = 100_000; break;
+            case ships < 300_000: ships = 300_000; break;
+            case ships < 500_000: ships = 500_000; break;
+            case ships < 750_000: ships = 750_000; break;
+            case ships < 1_000_000: ships = 1_000_000; break;
+            case ships < 2_000_000: ships = 2_000_000; break;
+            case ships < 3_000_000: ships = 3_000_000; break;
+            default:
+              ships = settings.galaxy.farm.ships
+          }
+          
           (async() => { 
             await GM.setValue('auto-farm', 1);
-            let element = $(sortList).eq(i)//$('.attack-item[data-allow-auto-farm]').eq(0)          
+            await GM.setValue('auto-farm-ships', ships);
+                      
 
             $(element).removeAttr('data-allow-auto-farm')
             $(element).trigger('click')
@@ -887,8 +914,10 @@ async function runScript() {
         console.log('auto farm')
         await GM.setValue('auto-farm', 2);
 
+        let ships = await GM.getValue('auto-farm-ships', settings.galaxy.farm.ships);
+        
         let parent = $('[data-ship-type="LIGHT_CARGO"]').parent()
-        let element = $('input', parent).val(settings.galaxy.farm.ships)
+        let element = $('input', parent).val(ships)
 
         $('#btn-next-fleet2').removeClass('disabled')
 
@@ -1002,6 +1031,27 @@ async function utils_UpdateCombatMessages() {
   })
 }
 
+/**
+ *	Dodaje informacje o rankingu w galaktyce
+ */
+function utils_addRankingToNicknameInGalaxy() {
+  if (!settings.galaxy.isShowPlayerRanking) { return }
+  
+  $('.galaxy-col.col-player:not(.header-col)').each((index, element) => {
+    let html = $('a > span', element).attr('data-tooltip-content')
+    let item = $(html).find(':contains("Ranking")').parent().find('a').eq(0)
+
+    let ranking = item.text()
+    let isProcessed = $('a > span > span.easy-ranking', element).length != 0
+
+    if (!isProcessed) {
+      $('a > span', element).eq(0).append('&nbsp;<span style="color: gold;" class="easy-ranking">' + ranking + '</span>')
+    }
+
+    console.log(ranking, isProcessed)
+  }) 
+}
+
 function utils_UpdateGalaxySystem() {    
   	if ($('.galaxy-info.scan').length == 1) {
       return
@@ -1009,6 +1059,8 @@ function utils_UpdateGalaxySystem() {
   
   	$('.galaxy-info').addClass('scan')
     let planets = []
+    
+    utils_addRankingToNicknameInGalaxy()
     
     $('#galaxyContent .galaxy-item').each(function() {
       let galaxy = $('#galaxyInput').val()
@@ -1206,9 +1258,9 @@ async function drawIdlers() {
     	attribute += ` data-allow-auto-scan="1"`
     }
     
-    if (sumOfResource != -1) {
-     	attribute += ` data-resource="` + sumOfResource + `"` 
-    }
+//     if (sumOfResource != -1) {
+//      	attribute += ` data-resource="` + sumOfResource + `"` 
+//     }
     
     attribute += `data-resource="` + sumOfResource + `"`
     
