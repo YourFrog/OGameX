@@ -43,7 +43,7 @@ const settings = {
   /************************************************/
   fleet: {
     // Ilość dostępnych slotów
-    slots: 47
+    slots: 49
   },
   galaxy: {
     // Czy pokazywać pozycje gracza obok jego nicku
@@ -80,7 +80,7 @@ const settings = {
     /************************************************/
     asteroid: {
       // Maksymalna ilość statków jaka może zostać wysłana
-      ships: 40_000_000,
+      ships: 48_000_000,
       
       // Maksymalna ilość misji w powietrzu
       maximumFleets: 5,
@@ -93,6 +93,41 @@ const settings = {
         // Enum: ObjectType
         type: ObjectType.PLANET
       }
+    },
+    
+    
+    expedition: {
+      // Ile ekspedycji będzie utrzymywał w powietrzu
+      maximumExpeditionCount: 13,
+      
+      // Na ile minut są wysyłane ekspedycje. 60 - 1h, 480 - 8h itp.
+      duration: 60,
+      
+      // Czas jaki oczekujemy przed wysłaniem kolejnej fali
+      delayBetweenMissions: {
+       	minimum: 10_000,
+        
+        maximum: 15_000
+      },
+      
+      /**
+       *	Statki które zostaną uwzględnione przy wysyłce
+       */
+     	allowShips: [
+      	//"HEAVY_CARGO",
+        //"LIGHT_CARGO",
+        // "ASTEROID_MINER",
+        // "SPY_PROBE",
+        "LIGHT_FIGHTER",
+        "HEAVY_FIGHTER",
+        "RECYCLER",
+        "CRUISER",
+        "BATTLESHIP",
+        "BATTLE_CRUISER",
+        "DESTROYER",
+        "PLANET_BOMBER",
+        "REAPER",
+      ]
     }
   },
   colors: {
@@ -114,6 +149,7 @@ const STATE_NOTHING = 0
 const STATE_SEND_MINNERS = 1
 const STATE_UPDATE_STATISTICS_ASTEROID = 2
 const STATE_AUTO_SEND_MINNERS = 3
+const STATE_AUTO_EXPEDITION_STEP_1 = 4
 
 ////
 // Allow state:
@@ -263,6 +299,18 @@ async function runScript() {
     </div>
   `)
   
+  let suffixExpedition = "off"
+  
+  if (await EasyOGameX.Data.Bot.Expedition.isOn()) {
+   	suffixExpedition = "on" 
+  }
+  
+  $('#left-menu-1').prepend(`
+    <div class="menu-item" style="margin-bottom: 30px;">
+      <a href="#" class="text-item" style="color:#4caf50;" id="yourfrog-auto-expedition">Expedition: ` + suffixExpedition + `</a>
+    </div>
+  `)
+  
   $('#left-menu-1').append(`
     <div class="menu-item">
       <a href="#" class="text-item" style="color:#4caf50;" id="yourfrog-export">Export Galaxy</a>
@@ -293,7 +341,10 @@ async function runScript() {
     if (!exists) {
       $('.message-area').prepend(`
         <div style="float:right;padding:2px;border:1px solid rgb(43,63,90);border-left:2px solid rgb(43,63,90);">
-          <a href="#" class="btn-route" style="padding:0px 10px;border-radius:0px;color: #0A0;font-weight: bold;" id="yourfrog-review-espionage">Review Espionage</a>
+          <a href="#" class="btn-route" style="padding:0px 10px;border-radius:0px;color: #0A0;font-weight: bold;" id="yourfrog-review-espionage">Review espionage</a>
+        </div>
+        <div style="float:right;padding:2px;border:1px solid rgb(43,63,90);border-left:2px solid rgb(43,63,90);">
+          <a href="#" class="btn-route" style="padding:0px 10px;border-radius:0px;color: #0A0;font-weight: bold;" id="yourfrog-review-espionage-fast">Fast review espionage</a>
         </div>
       `)
     }
@@ -312,17 +363,68 @@ async function runScript() {
     })()
   })
   
+  $(document).on('click', '#yourfrog-auto-expedition', (event) => {
+  	  
+    (async() => {
+      await EasyOGameX.Data.Bot.Expedition.toggle()    
+      EasyOGameX.Navigator.goToPage('/fleet', STATE_NOTHING)
+    })()
+  })
+  
+  // Przyśpieszona procedura zbierania informacji o farmach z wiadomości
+  $(document).on('click', '#yourfrog-review-espionage-fast', function() {
+    let elements = $('a.btn-report-more-info');
+    let size = elements.length
+
+    // Zebranie EspionageID w celu przyśpieszonych ataków na farmy
+    elements.each((index, element) => {
+      let mainElement = $(element).closest('[data-msg-template="FLEET_ESPIONAGE_REPORT"]')
+
+      let coordinates = EasyOGameX.Utils.Espionage.extractEspionageCoordinates(mainElement)
+      let farm = dataOfGalaxy[coordinates.toSimpleString()]
+
+      farm.lastEspionageId = EasyOGameX.Utils.Espionage.extractEspionageId(mainElement)
+      
+      let hasFleet = $(':contains("Fleet: 0")', mainElement).length == 0
+      let hasDefense = $(':contains("Defense: 0")', mainElement).length == 0
+      
+      if (hasFleet || hasDefense) {
+       	return true 
+      }
+      
+      let resource = {
+      	metal: parseInt($('img[src="/assets/images/resource/metal.png"]', mainElement).parent().text().split(':')[1].trim().replaceAll('.', '')),
+      	crystal: parseInt($('img[src="/assets/images/resource/crystal.png"]', mainElement).parent().text().split(':')[1].trim().replaceAll('.', '')),
+      	deuter: parseInt($('img[src="/assets/images/resource/deuterium.png"]', mainElement).parent().text().split(':')[1].trim().replaceAll('.', ''))
+    	}
+
+      farm.espionage = {
+        type: 'short',
+        updateAt: (new Date()).getTime(),
+        building: {},
+        resource: resource
+      }
+    });
+
+    // Zapisanie zmian oraz rozpoczęcie przeglądania raportów 
+    (async() => {
+      let serializeObj = JSON.stringify(dataOfGalaxy);
+      await GM.setValue('galaxy', serializeObj);
+      
+      alert('Skończyłem')
+    })()
+  })
+  
   // Przejrzenie wszystkich raportów szpiegowskich
   $(document).on('click', '#yourfrog-review-espionage', function() {
     let elements = $('a.btn-report-more-info');
-    let size = elements.length
-        
+
     elements.each((index, element) => {
       setTimeout(() => {
         $(element)[0].click();
       }, index * 2000)
     });
-    
+
     setTimeout(() => { alert("Skończyłem"); }, elements.length * 2000)
   });
   
@@ -447,54 +549,147 @@ async function runScript() {
     	let availableSlots = parseInt(settings.fleet.slots)
       let actualMovements = parseInt($('#fleet-movement-detail-btn span:contains("Own")').text().split(' ')[0])
         
+      if (isNaN(actualMovements)) {
+    		return availableSlots - 1    
+      }
+    
     	return availableSlots - actualMovements - 1  
   }
   
   // Automatyczne wysyłanie skanów do farm które nie skanowano od 1h
   $(document).on('click', '[data-auto-scan]', function(event) {
-    	event.preventDefault();
-    
-      let max = countPossibleSlotsForAttack()
-      let interval = 1_000
-      
-      
-      let elements = $('[data-allow-auto-scan="1"]').filter(function() {
-        let galaxy = $(this).data('galaxy')
-        let system = $(this).data('system')
-        let position = $(this).data('position')
+    event.preventDefault();
 
-        let coordinate = galaxy + ":" + system + ":" + position
-
-        let now = (new Date()).getTime()
-        let farm = dataOfGalaxy[coordinate]
-
-
-        if (typeof farm.espionage != 'undefined') {
-          let difference = farm.espionage.updateAt
-
-          if (difference <= 60 * 60 * 1000) {
-            return false 
-          }
-        }
-
-        return true
-      })
-      
-      for(let i = 0; i < max; i++) {
-        setTimeout(() => {
-          $('[data-auto-scan]').text('Auto scan ' + (i + 1) + ' z ' + max)
-          
-          let element = elements[i]
-          $(element).attr('data-allow-auto-scan', 0).css('color', 'black')
-	        $(element).parent().find('.btnActionSpy')[0].click()
-        }, i * 1000)
-      }
-    
-    setTimeout(() => {
-      alert('Zakonczono')
-    }, max * 1000)
+    sendEspionages()
   })
   
+  /**
+   *	Wysłanie sond na farmy
+   */
+  function sendEspionages() {
+    let max = countPossibleSlotsForAttack()
+    let interval = 1_000
+
+    // Działa
+    let elements = $('[data-allow-auto-scan="1"]').filter(function() {
+      let galaxy = $(this).data('galaxy')
+      let system = $(this).data('system')
+      let position = $(this).data('position')
+
+      let coordinate = galaxy + ":" + system + ":" + position
+
+      let now = (new Date()).getTime()
+      let farm = dataOfGalaxy[coordinate]
+
+
+      if (typeof farm.espionage != 'undefined') {
+        let difference = farm.espionage.updateAt
+
+        if (difference <= 60 * 60 * 1000) {
+          return false 
+        }
+      }
+
+      return true
+    })
+
+    // Ilość paczek 
+    let packages = parseInt(elements.length / max) + 1
+    
+    for(let package = 0; package < packages; package++) {
+      let delayBetweenPackages = package * (max > 30 ? max : 30) * 1_000 
+          
+      setTimeout(() => {
+        for(let i = 0; i < max; i++) {
+          let index = package * max + i
+
+          setTimeout(() => {
+            $('[data-auto-scan]').text('Auto scan ' + (i + 1) + ' z ' + max)
+
+            let element = elements[index]
+            $(element).attr('data-allow-auto-scan', 0).css('color', 'black')
+            $(element).parent().find('.btnActionSpy')[0].click()
+          }, i * 1000)
+        }
+      }, delayBetweenPackages)
+    }
+    
+    
+
+//     setTimeout(() => {
+//       alert('Zakonczono')
+//     }, packages 30 * 1000)
+  }
+  
+  // Farmienie po nowemu
+  $(document).on('click', '[data-auto-farm="3"]', function(event) {
+    let mainElement = $(this)
+    let max = countPossibleSlotsForAttack()
+
+    let allElementsBeforeSort = $('.attack-item[data-allow-auto-farm]')
+    	.filter((index, element) => {
+	      let espionageId = $(element).data('espionage-id')
+      	let resource = $(element).data('resource')
+
+      	let hasResource = resource > settings.galaxy.farm.minimum_resource
+        let hasEspionageId = espionageId != "-1"
+        
+        return hasEspionageId
+    	})
+      .toArray()
+    
+    let allElements = allElementsBeforeSort
+    	.sort((a, b) => { 
+        let aCoordinate = a.getAttribute('data-coordinate');
+        let bCoordinate = b.getAttribute('data-coordinate');
+
+      	let aSum = getSumOfResourceOnPlanetFromEspionage(aCoordinate)
+        let bSum = getSumOfResourceOnPlanetFromEspionage(bCoordinate)
+        
+        if (aSum == -1 && bSum == -1) {
+         	return 0 
+        }
+      
+      	if (aSum > bSum) { return -1; }
+      
+      	return 1;
+    	})
+    
+    let allElementsToFarm = $(allElements).getRange(0, max - 1);
+        
+    (async() => {
+      for(let index in allElementsToFarm) {
+       	let element = allElementsToFarm[index]
+
+        let coordinate = EasyOGameX.Utils.stringToCoordinate($(element).attr('data-coordinate'));
+
+        // Ustawienie współrzędnych
+        $('#galaxyInput').val(coordinate.galaxy)
+        $('#systemInput').val(coordinate.system)
+
+        // Pobranie danych
+        $('.x-btn-go')[0].click();
+
+        // Oczekiwanie na załadowanie strony
+        await EasySelenium.waitForElementNotExists('#BackGroundFreezerPreloader_Element');
+
+        // Wysłanie floty
+        let row = $('.galaxy-info .galaxy-item:not(.galaxy-item-head)').eq(coordinate.position - 1)
+        let plunderElement = $('.btnActionPlunder', row)
+        
+        plunderElement[0].click()
+
+        // Zapisanie że wysłano
+        let serialize = await GM.getValue('galaxy', '{}');
+        let data = JSON.parse(serialize)
+
+        data[coordinate.toSimpleString()].last_attack = (new Date()).getTime()
+        
+        let serializeObj = JSON.stringify(data);
+        await GM.setValue('galaxy', serializeObj);
+      }
+    })()
+  })
   
   // Farmienie gdzie jako podstawa służy ilość surowców
   $(document).on('click', '[data-auto-farm="2"]', function(event) {
@@ -514,9 +709,6 @@ async function runScript() {
         if (aSum == -1 && bSum == -1) {
          	return 0 
         }
-      
-        $(a).attr('resource', aSum)
-        $(b).attr('resource', bSum)
       
       	if (aSum > bSum) { return -1; }
       
@@ -552,7 +744,6 @@ async function runScript() {
     	let sortList = allElements
       								.getRange(0, max - 1)
       								.reverse();
-    
     	if (sortList.length <= 0) {
         alert('Brak farm spełniającyh kryteria')
         return true
@@ -707,6 +898,7 @@ async function runScript() {
   let isGalaxyPage = location.pathname == "/galaxy"
   let isMessagePage = location.pathname == "/messages"
   let isFleetPage = location.pathname == "/fleet"
+  let isAutoExpeditionPage = location.pathname == "/fleet/autoexpedition"
   let isProfilePage = location.pathname == "/home/playerprofile"
   
   if (isGalaxyPage) {
@@ -805,6 +997,7 @@ async function runScript() {
         if (metalStorageLevel >= 15) {	
           farm.isLowFarm = false
           farm.espionage = {
+            type: 'full',
             updateAt: (new Date()).getTime(),
             building: {
               storage: {
@@ -842,7 +1035,88 @@ async function runScript() {
     }
   }
   
+  if (isAutoExpeditionPage) {
+    
+    switch(true) {
+      case await EasyOGameX.State.is(STATE_AUTO_EXPEDITION_STEP_1) && await EasyOGameX.Data.Bot.Expedition.isOn():
+        let extra = await EasyOGameX.State.extra()
+        let delayToSend = randomInteger(settings.galaxy.expedition.delayBetweenMissions.minimum, settings.galaxy.expedition.delayBetweenMissions.maximum)
+        
+        if (extra.success == 0) {
+        	delayToSend = 0  
+        }
+        
+        if (extra.success >= extra.missionCount) {
+          await EasyOGameX.Data.Bot.Expedition.off()
+          
+        	alert("Wysłano wszystkie ekspedycje")
+          return
+        }
+        
+
+        setTimeout(() => {
+          (async() => {
+
+            for(let name in extra.shipsEachExpedition) {
+              let quantity = extra.shipsEachExpedition[name]
+
+              unsafeWindow.AutoNumeric.getAutoNumericElement('div[data-ship-type="' + name + '"] input').set(quantity);
+            }
+
+            $('#expeditionCount').val("1").change()					// Ilosc ekspedycji, Zawsze 1
+            $('#expeditionDuration').val(settings.galaxy.expedition.duration).change() 	  // 1 hour
+            $('#expeditionFleetSpeed').val("100").change()	// 100% speed
+
+            extra.success += 1
+            await EasyOGameX.State.set(STATE_AUTO_EXPEDITION_STEP_1, extra)
+
+            // Wysłanie floty
+            unsafeWindow.CheckShipQuantity()
+            EasySelenium.click('#btnSend')
+
+
+            // Zaakceptowanie konfirmacji
+            await EasySelenium.waitForElement('button.swal2-confirm:visible')
+
+            EasySelenium.click('button.swal2-confirm')
+          })()
+        }, delayToSend)
+        break;
+    }
+  }
+  
   if (isFleetPage) {
+    
+    switch(true) {
+      case await EasyOGameX.State.is(STATE_NOTHING) && await EasyOGameX.Data.Bot.Expedition.isOn():
+          // Zliczamy statki
+          let ships = {}
+          let shipsEachExpedition = {}
+
+          let allowShips = settings.galaxy.expedition.allowShips
+
+          let currentMissionCount = await EasyOGameX.Fleet.countOfExpedition()
+          let leftExpeditionMissionCount = settings.galaxy.expedition.maximumExpeditionCount - currentMissionCount
+
+          for(index in allowShips) {
+            let name = allowShips[index]
+
+            let count = $('[data-ship-type="' + name + '"]').data('ship-quantity')
+
+            ships[name] = count
+            shipsEachExpedition[name] = parseInt(count / leftExpeditionMissionCount)
+          }
+
+          let extra = {
+            missionCount: leftExpeditionMissionCount,
+            success: 0,
+            ships: ships,
+            shipsEachExpedition: shipsEachExpedition 
+          }
+
+          EasyOGameX.Navigator.goToPage('/fleet/autoexpedition', STATE_AUTO_EXPEDITION_STEP_1, extra)
+        break;
+    }
     
     if (EasyBrowser.urlParameterExists("fleetSendSuccessfully") && await EasyOGameX.State.is(STATE_SEND_MINNERS)) {
       await EasyOGameX.State.reset()
@@ -960,6 +1234,43 @@ function getSumOfResourceOnPlanetFromEspionage(coordinate) {
   return parseInt(parseInt(resource.metal) + parseInt(resource.crystal) * 1.5 + parseInt(resource.deuter) * 3)
 }
 
+/**
+ *	Zwraca identyfikator ostatniego skanowania 
+ */	
+function findLastEspionageIdByCoordinate(coordinate) {
+  let farm = dataOfGalaxy[coordinate]
+  let lastEspionageId = farm.lastEspionageId
+  
+  if (typeof farm.lastEspionageId == 'undefined') {
+    return -1
+  }
+  
+  return lastEspionageId
+}
+
+function findPlanetsByNickname(nickname) {
+  let result = {}
+  
+ 	for(cords in dataOfGalaxy) {
+  	let planet = dataOfGalaxy[cords]
+    
+    
+    if (planet.player_name == nickname) {
+    	result[cords] = planet
+      
+      
+			$('.planet-section:not(.easy-complete)').append(`
+      	<a class="planet-page" href="/galaxy?x=1&amp;y=287">
+                    <div class="planet-img" style="background:url(../../assets/images/V2/planet/22/22_small.jpg) no-repeat;"> </div>
+                    <div class="planet-name">` + planet.planet_name + `</div>
+                    <div class="planet-coord">[` + cords + `]</div>
+				</a>
+      `)
+    }
+ 	}
+  
+  return result
+}
 
 $(document).ready(function() {
   
@@ -985,6 +1296,12 @@ $(document).ready(function() {
   (async() => {
     let serialize = await GM.getValue('galaxy', '{}');
     dataOfGalaxy = JSON.parse(serialize)
+    
+    
+    
+    setInterval(() => {
+    	$('.planet-section').addClass('easy-complete')
+    }, 500)
     
     runScript()
   })()
@@ -1045,7 +1362,7 @@ function utils_addRankingToNicknameInGalaxy() {
     let isProcessed = $('a > span > span.easy-ranking', element).length != 0
 
     if (!isProcessed) {
-      $('a > span', element).eq(0).append('&nbsp;<span style="color: gold;" class="easy-ranking">' + ranking + '</span>')
+      $('a', element).eq(0).append('&nbsp;<span style="color: gold;font-size: 9px;" class="easy-ranking">' + ranking + '</span>')
     }
 
     console.log(ranking, isProcessed)
@@ -1196,7 +1513,7 @@ async function drawIdlers() {
      	continue 
     }
     
-    if (!item.is_inactive7) {
+    if (!item.is_inactive7 && !item.is_inactive28) {
      	continue 
     }
     
@@ -1262,7 +1579,7 @@ async function drawIdlers() {
 //      	attribute += ` data-resource="` + sumOfResource + `"` 
 //     }
     
-    attribute += `data-resource="` + sumOfResource + `"`
+    attribute += `data-resource="` + sumOfResource + `" data-espionage-id="` + findLastEspionageIdByCoordinate(item.galaxy + `:` + item.system + `:` + item.position) + `"`
     
     content += `
     	<li>
@@ -1284,11 +1601,12 @@ async function drawIdlers() {
   	<div id="yourfrog-idlers" style="padding: 20px;">
     	<h5>Idlers</h5>
       
-      <center>
-      	<a href="#auto-farm" data-auto-farm="1" style="color: white;" id="auto-farm">Auto Farm by distance</a>
-      	<a href="#auto-farm" data-auto-farm="2" style="color: white;" id="auto-farm">Auto Farm by resource</a>
-      	<a href="#auto-scan" data-auto-scan="1" style="color: white;" id="auto-scan">Auto Scan</a>
-      </center>
+      <ul style="margin: 20px; 0px;"s>
+      	<li><a href="#auto-farm" data-auto-farm="1" style="color: white;" id="auto-farm">Auto Farm by distance</a></li>
+      	<li><a href="#auto-farm" data-auto-farm="2" style="color: white;" id="auto-farm">Auto Farm by resource</a></li>
+      	<li><a href="#auto-farm" data-auto-farm="3" style="color: white;" id="auto-farm">Auto Farm by fast espionage</a></li>
+      	<li><a href="#auto-scan" data-auto-scan="1" style="color: white;" id="auto-scan">Auto Scan</a></li>
+      </ul>
       
       <ul style="float: right">
       	<li>Legenda kolorów</li>
@@ -1502,6 +1820,25 @@ const EasyOGameX = {
       let count = $('#layoutFleetMovements .row-mission-type-ASTEROID_MINING.row-fleet-return').length
       
       return count
+    },
+    
+    /**
+     *	Zliczenie aktualnie trwającej ilości ekspedycji
+     */
+    countOfExpedition: async function() {
+      let isOpen = $('#layoutFleetMovements.fleet-movement-wrapper.opened').length == 1
+          
+      if (!isOpen) {
+      	// Próba otwarcia zakładki z flotą
+        if (!EasySelenium.click('#fleet-movement-detail-btn')) { return 0 }
+        
+        // Oczekujemy na załadowanie flot
+        await EasySelenium.waitForElement('#layoutFleetMovements.fleet-movement-wrapper.opened');
+      }
+      
+      let count = $('#layoutFleetMovements .row-mission-type-EXPEDITION.row-fleet-return').length
+      
+      return count
     }
   },
 	Galaxy: {
@@ -1619,6 +1956,20 @@ const EasyOGameX = {
 		}	
 	},
 	Utils: {
+    Espionage: {
+    	extractEspionageId: function(parent) {
+        return $(parent).data('msg-id')
+      },
+      
+      extractEspionageCoordinates: function(parent) {
+        let coordinate = $('.message-head .head-left a', parent).eq(0).text().split('[')[1].split(']')[0]
+            
+        let obj = EasyOGameX.Utils.stringToCoordinate(coordinate)
+        
+        return obj
+      }
+    },
+    
 		/** 
 		 *	Zamienia ciąg w postaci "[{galaxy}:{system}:{position}]"
 		 */
@@ -1722,6 +2073,29 @@ const EasyOGameX = {
           let value = await EasyOGameX.Data.Bot.Farming.isAutoMiners()
           
           await GM.setValue('data.bot.farming.auto_miners', !value);
+        }
+      },
+      
+      /**
+       *	Funkcje dotyczące bota od ekspedycji
+       */
+      Expedition: {
+        isOn: async function() {
+        	return await GM.getValue('data.bot.expedition.is_on', false)  
+        },
+        
+        isOff: async function() {
+          return !EasyOGameX.Bot.Expedition.isOn()
+        },
+        
+        off: async function() {
+          await GM.setValue('data.bot.expedition.is_on', false);
+        },
+        
+        toggle: async function() {
+          let value = await EasyOGameX.Data.Bot.Expedition.isOn()
+          
+          await GM.setValue('data.bot.expedition.is_on', !value);
         }
       }
     },
@@ -1915,6 +2289,18 @@ function Coordinate(galaxy, system, position, type = ObjectType.UNKNOWN)
       
       return true
   }
+  
+  this.toSimpleString = function() {
+   	return this.galaxy + ":" + this.system + ":" + this.position 
+  }
+  
+  this.toFullString = function() {
+   	return "[" + this.toSimpleString() + "]" 
+  }
+}
+
+function randomInteger(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 
