@@ -121,6 +121,17 @@ function updateResourceInformation() {
   
 }
 
+/**
+ *	Aktualizuje informacje o aktywności na planecie
+ */
+function updatePlanetActivity() {
+  let cords = utils_getCurrentCoordinates()
+  let planet = planets[cords]
+  
+  if (typeof planet != "undefined") {
+  	planet.last_activity = (new Date()).getTime()
+  }
+}
 
 async function state_reset() {
   await GM.setValue('script_state', STATE_NOTHING);
@@ -275,6 +286,7 @@ async function runScript() {
   planets = JSON.parse(jsonSerialize)
   
   updateResourceInformation()
+  updatePlanetActivity()
   
   if (isHomePage) {
 		runScript_Home()
@@ -355,6 +367,7 @@ async function runScript() {
 
       // Zaaktualizujemy informacje na tej planecie
       updateResourceInformation()
+      updatePlanetActivity()
       
       await YourFrogAddMineLevelsToPlanets()
     } else {
@@ -699,7 +712,49 @@ function YourFrogAddMineLevelsToPlanet(showWarning, cords, levels, resources, mi
   </div>
   ` + contentOfResource + `
 	`)
+  
+  drawPlanetActivities(cords)
+  
+  unsafeWindow.ConfigureTooltips();
 }
+
+function drawPlanetActivities(cords)
+{
+  let planet = planets[cords]
+  
+  let now = (new Date()).getTime()
+  let leftMinutes = parseInt((now - planet.last_activity) / 60_000)
+ 
+  let container = $('#other-planets .planet-item span.planet-coords:contains("' + cords + '")').parent().parent()
+  
+  let color = "red"
+  let tooltip = ''
+  
+  switch(true) {
+    case typeof planet.last_activity == 'undefined': 
+      	color = 'silver'; 
+      break;  
+    case now - planet.last_activity >= 60 * 60_000: 
+      	color = 'red'; 
+      break;
+    case now - planet.last_activity < 5 * 60_000: 
+      	color = 'green'; 
+      break;
+    case now - planet.last_activity < 60 * 60_000: 
+      	color = 'yellow'; 
+	      tooltip = `class="tooltip" data-tooltip-position="bottom" data-tooltip-content="<span style='font-size: 8px;'>` + leftMinutes + ` minutes ago</span>"`;
+      break;
+  }
+  
+  // Dodanie informacji o aktynwości na planecie
+  $(container).css('position', 'relative')
+  $(container).append(`
+    <div style="position: absolute; right: -5px; top: -5px;background-color: ` + color + `; border-radius: 25px;font-size: 10px; width: 10px;height: 10px;display:grid; text-align: center;align-items: center; color: white;font-weight: bold;"  ` + tooltip + `>
+    
+    </div>
+  `)
+}
+
 
 function YourFrogResourceAmountFormat(value) {
   let number

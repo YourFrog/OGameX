@@ -24,7 +24,6 @@ $(document).ready(function() {
 		let jsonSerialize = await GM.getValue('data', '{"promoteLinks": {}, "importExport": {}}');
   	data = JSON.parse(jsonSerialize)
     
-    console.log(data)
     runScript()
 
     let serializeObj = JSON.stringify(data);
