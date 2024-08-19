@@ -680,8 +680,8 @@ function YourFrogAddMineLevelsToPlanet(showWarning, cords, levels, resources, mi
     let now = (new Date()).getTime()
     let diffInSeconds = (now - resources.updateAt) / 1000
 
-    if (diffInSeconds < 5 * 60) {
-      let opacity = 1 - (diffInSeconds / (5 * 60))
+    if (diffInSeconds < 60 * 60) {
+      let opacity = 1 - (diffInSeconds / (60 * 60))
       
       contentOfResource = `
         <div style="opacity: ` + opacity + `">

@@ -7,6 +7,8 @@
 // @include  *https://hyper.ogamex.net/home/playerprofile*
 // @include  *https://hyper.ogamex.net/statistics*
 // @require https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js 
+// @require https://cdn.datatables.net/2.1.4/js/dataTables.min.js
+// @resource https://cdn.datatables.net/2.1.4/css/dataTables.dataTables.min.css
 // @grant           GM.setValue
 // @grant           GM.getValue
 // @grant    GM.setClipboard
@@ -45,7 +47,7 @@ const settings = {
   /************************************************/
   fleet: {
     // Ilość dostępnych slotów
-    slots: 55
+    slots: 58
   },
   galaxy: {
     // Czy pokazywać pozycje gracza obok jego nicku
@@ -89,7 +91,7 @@ const settings = {
     /************************************************/
     asteroid: {
       // Maksymalna ilość statków jaka może zostać wysłana
-      ships: 100_000_000,
+      ships: 115_000_000,
       
       // Maksymalna ilość misji w powietrzu
       maximumFleets: 5,
@@ -395,7 +397,7 @@ async function runScript() {
 
       let ships = parseInt(split[1].trim().replaceAll(".", ""))
 
-      if (ships < 1_800_000_000) {
+      if (ships < 15_800_000_000) {
         return true
       }
       
@@ -488,27 +490,28 @@ async function runScript() {
           </table>
         </div>
         
-        <div style="margin-top: 10px;">
+        <div style="margin-top: 5px;">
           <center><span>Oficerowie</span></center>
           <table style="width: 100%;">
             <tbody>` + officersContent + `</tbody>
           </table>
         </div>
         
-        <div style="margin-top: 10px;">
+        <div style="margin-top: 5px;">
           <center><span>Akademia</span></center>
           <table style="width: 100%;">
             <tbody>` + academyContent + `</tbody>
           </table>
         </div>
         
-        <div style="margin-top: 10px;">
+        <div style="margin-top: 5px;">
           <center><span>Ranking</span></center>
           <table style="width: 100%;">
             <tbody>` + rankingContent + `</tbody>
           </table>
         </div>
       `)
+      
     })
   })
   
@@ -865,17 +868,25 @@ function toFlatData(data)
   })
   
   // Automatyczne wysyłanie skanów do farm które nie skanowano od 1h
-  $(document).on('click', '[data-auto-scan]', function(event) {
+  $(document).on('click', '[data-auto-scan="1"]', function(event) {
     event.preventDefault();
 
     (async() => {
-   sendEspionages()
+   		sendEspionages()
+    })()
+  })
+  
+  $(document).on('click', '[data-auto-scan="2"]', function(event) {
+    event.preventDefault();
+
+    (async() => {
+//    sendEspionages()
       
 //       let planets = findPlanetsByNickname("Umpalumpa")
 //       console.log(planets)
 //       return
       
-//       sendEspionagesToGalaxy(5, 250, 400)
+      sendEspionagesToGalaxy(6, 1, 500, 50, 30, 300)
 //       sendEspionagesToGalaxy(1, 251, 300)
 //       sendEspionagesToGalaxy(1, 301, 350)
 //       sendEspionagesToGalaxy(1, 351, 400)
@@ -896,8 +907,8 @@ function toFlatData(data)
     return undefined
   };
   
-  async function sendEspionagesToGalaxy(value, minSystem, maxSystem) {
-  	let planets = findPlanetsByGalaxy(value)
+  async function sendEspionagesToGalaxy(galaxy, minSystem, maxSystem, minRanking, minFleet, maxFleet) {
+  	let planets = findPlanetsByGalaxy(galaxy)
     
     let filteredPlanets = []
     
@@ -913,9 +924,9 @@ function toFlatData(data)
       if (planet.is_noob) { continue; }
       
       if (!ranking) { continue; }
-      if (ranking.fleet < 30 || ranking.fleet >= 450) { continue; }
+      if (ranking.fleet < minFleet || ranking.fleet >= maxFleet) { continue; }
       if (planet.system < minSystem || planet.system > maxSystem) { continue; }
-      if (planet.ranking < 50) { continue; }
+      if (planet.ranking < minRanking) { continue; }
       if (planet.alliance == 'SGF') { continue; }
       
       filteredPlanets.push(planet)
@@ -1872,8 +1883,6 @@ function utils_addRankingToNicknameInGalaxy() {
     if (!isProcessed) {
       $('a', element).eq(0).append('&nbsp;<span style="color: gold;font-size: 9px;" class="easy-ranking">' + ranking + '</span>')
     }
-
-    console.log(ranking, isProcessed)
   }) 
 }
 
@@ -2140,7 +2149,8 @@ async function drawIdlers() {
               </span>
             </a>
 				</td>
-        <td><span>` + (sumOfResource > 0 && showResource ? sumOfResource.toLocaleString() : '') + `</span></td>
+        <td>` + distance + `</td>
+        <td data-order="` + (sumOfResource > 0 && showResource ? sumOfResource : 0) + `"><span>` + (sumOfResource > 0 && showResource ? sumOfResource.toLocaleString() : '') + `</span></td>
         <td>` + (lastAttackInSeconds > 0 && lastAttackInSeconds < maximumTimeForTimer ? secondsToReadable(lastAttackInSeconds) : '') + `</td>
         <td>
             <a href="#" class="btnActionSpy tooltip" onclick="SendSpy(` + item.galaxy + `,` + item.system + `, ` + item.position + ` ,1,false); return false;" data-tooltip-position="top" data-tooltip-content="<div style='font-size:11px;'>Spy</div>" style="font-size: 7px; color: white;">Szpieguj</a>
@@ -2160,6 +2170,7 @@ async function drawIdlers() {
       	<li><a href="#auto-farm" data-auto-farm="2" style="color: white;" id="auto-farm">Auto Farm by resource</a></li>
       	<li><a href="#auto-farm" data-auto-farm="3" style="color: white;" id="auto-farm">Auto Farm by fast espionage</a></li>
       	<li><a href="#auto-scan" data-auto-scan="1" style="color: white;" id="auto-scan">Auto scan</a></li>
+      	<li><a href="#auto-scan" data-auto-scan="2" style="color: white;" id="auto-scan">Auto scan - Players</a></li>
       </ul>
       
       <ul style="float: right">
@@ -2171,11 +2182,12 @@ async function drawIdlers() {
     	  <li><span style="font-size: 7px; color:gold">Dobra farma</span></li>
     	  <li><span style="font-size: 7px; color:silver">Zbyt mało surowców</span></li>
       </ul>
-    	<table style="font-size: 11px;width: 100%;margin-top: 10px;">
+    	<table style="font-size: 11px;width: 100%;margin-top: 10px;" id="farm-table">
       	<thead>
         	<tr>
           	<td>Ranking</td>
             <td>Współrzędne</td>
+            <td>Dystans</td>
             <td>Surowce</td>
             <td>Ostatni atak</td>
             <td>Akcje</td>
@@ -2187,6 +2199,12 @@ async function drawIdlers() {
       </table>
     </div>
   `)
+  
+  
+  let table = new DataTable('#farm-table', {
+    searching: false,
+    paging: false
+  });
   
   console.log('complete idlers')
 }
