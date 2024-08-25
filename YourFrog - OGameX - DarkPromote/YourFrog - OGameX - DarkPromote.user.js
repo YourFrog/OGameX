@@ -3,6 +3,7 @@
 // @version  1
 // @include  *hyper.ogamex.net/*
 // @require https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js 
+// @require https://github.com/YourFrog/OGameX/raw/main/YourFrog%20-%20OGameX%20-%20Communicate/YourFrog%20-%20OGameX%20-%20Communicate.user.js
 // @grant           GM.setValue
 // @grant           GM.getValue
 // ==/UserScript==
@@ -78,6 +79,8 @@ function addImportExportIfNeeded() {
   
   let isVisible
   
+ 
+  Logger.add("Import/Export left " + unsafeWindow.ConvertToTimeString(leftInSeconds), 5_000)
   switch(true) {
     case item.isPurchased && leftInSeconds > 0: isVisible = false; break;
     case item.isPurchased && leftInSeconds < 0: isVisible = true; break;
@@ -102,6 +105,7 @@ function addPromoteIfNeeded() {
   let isVisible = false
   let label = ''
  
+  Logger.add("Dark promote left " + unsafeWindow.ConvertToTimeString(leftInSeconds), 5_000)
   switch(true) {
     case leftInSeconds < settings.promote.visibleFrom: 
       	label = "Promote: " + unsafeWindow.ConvertToTimeString(leftInSeconds)

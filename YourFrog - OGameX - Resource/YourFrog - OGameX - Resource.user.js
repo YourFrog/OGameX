@@ -757,7 +757,7 @@ function drawPlanetActivities(cords)
 
 
 function YourFrogResourceAmountFormat(value) {
-  let number
+  let number = 0
   let sufix
   
   if (value > 1_000) {
@@ -890,9 +890,9 @@ function YourFrogTiming(resources) {
 	].forEach((element) => {
 
 		requireResource = {
-		  metal: $('div#' + element.id + ' span.resource-amount').eq(0).text().replaceAll(".", ""),
-		  crystal: requireCrystal = $('div#' + element.id + ' span.resource-amount').eq(1).text().replaceAll(".", ""),
-		  deuter: requireCrystal = $('div#' + element.id + ' span.resource-amount').eq(2).text().replaceAll(".", ""),
+		  metal: $('div#' + element.id + ' span[style*="metal"]').parent().find('.resource-amount').text().replaceAll(".", ""),
+		  crystal: requireCrystal = $('div#' + element.id + ' span[style*="crystal"]').parent().find('.resource-amount').text().replaceAll(".", ""),
+		  deuter: requireCrystal = $('div#' + element.id + ' span[style*="deuterium"]').parent().find('.resource-amount').text().replaceAll(".", ""),
 		}
 
 		timeLeft = {

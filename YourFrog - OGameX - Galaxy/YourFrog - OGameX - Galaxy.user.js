@@ -7,6 +7,7 @@
 // @include  *https://hyper.ogamex.net/home/playerprofile*
 // @include  *https://hyper.ogamex.net/statistics*
 // @require https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js 
+// @require https://github.com/YourFrog/OGameX/raw/main/YourFrog%20-%20OGameX%20-%20Communicate/YourFrog%20-%20OGameX%20-%20Communicate.user.js
 // @require https://cdn.datatables.net/2.1.4/js/dataTables.min.js
 // @resource https://cdn.datatables.net/2.1.4/css/dataTables.dataTables.min.css
 // @grant           GM.setValue
@@ -33,6 +34,7 @@ let dataOfGalaxy = {}
 let dataOfRanking = {}
 let asteroids = {}
 let autoFarm = 0
+
 
 /************************************************/
 /*                                              */
@@ -67,7 +69,7 @@ const settings = {
     },
     farm: {
       // Minimalny ranking gracza aby uwzględniać go na liście farm
-     	minimum_ranking: 1400,
+     	minimum_ranking: 1, //1400,
       
       // Ważność raportu szpiegowskiego w sekundach (default 45 min)
       validity_of_espionage_report_in_seconds: 45 * 60 * 1_000,
@@ -82,7 +84,21 @@ const settings = {
       capacity: 71_250,
 
       // Minimalna ilość surowców na farmie którą atakujemy
-      minimum_resource: 10_000_000_000
+      minimum_resource: 10_000_000_000,
+      
+      // Planety które bierzemy pod uwagę przy farmieniu
+      availablePlanets: [
+        {coordinates: "1:56:9", type: ObjectType.PLANET},	  // S
+        {coordinates: "1:145:4", type: ObjectType.PLANET},
+        {coordinates: "1:287:9", type: ObjectType.PLANET},  // M
+        {coordinates: "1:374:7", type: ObjectType.PLANET},  // R
+        
+        {coordinates: "2:241:7", type: ObjectType.PLANET},
+        
+        {coordinates: "3:246:7", type: ObjectType.PLANET},
+        
+        {coordinates: "4:119:7", type: ObjectType.PLANET},
+      ]
     },
     /************************************************/
     /*                                              */
@@ -91,10 +107,10 @@ const settings = {
     /************************************************/
     asteroid: {
       // Maksymalna ilość statków jaka może zostać wysłana
-      ships: 115_000_000,
+      ships: 315_000_000,
       
       // Maksymalna ilość misji w powietrzu
-      maximumFleets: 5,
+      maximumFleets: 8,
       
       // Informacje o obiekcie z którego będą wysyłane statki
       source: { 
@@ -362,6 +378,10 @@ async function runScript() {
           <a href="#" class="btn-route" style="padding:0px 10px;border-radius:0px;color: #0A0;font-weight: bold;" id="yourfrog-highlight-espionage">Highlight espionage</a>
         </div>
       `)
+
+      if ($('.message-area .pagination-area:eq(0) .page-index-text.x-remove-msg-category').length != 1) {
+        $('.message-area .pagination-area:eq(0)').prepend($('.page-index-text.x-remove-msg-category').parent().clone(true, true))
+      }
     }
   }, 500)
   
@@ -1038,6 +1058,13 @@ function toFlatData(data)
   $(document).on('click', '[data-auto-farm="3"]', function(event) {
     let mainElement = $(this)
     let max = countPossibleSlotsForAttack()
+    let defineMax = $('#input-maximum-slots option:selected').val()
+    
+    if (defineMax != '*') {
+    	max = Math.min(max, parseInt(defineMax))  
+    }
+    
+    // input-maximum-slots
     
     let allElementsBeforeSort = $('.attack-item[data-allow-auto-farm]')
     	.filter((index, element) => {
@@ -1049,6 +1076,22 @@ function toFlatData(data)
         
         return hasResource && hasEspionageId
     	})
+      .filter((index, element) => {
+
+        let rowText = $(element).parent().parent().find('td:eq(5)').text().trim()
+        let defineCoordinate = EasyOGameX.Utils.stringToCoordinate(rowText)
+            
+        let current = utils_getCurrentCoordinates()
+        let currentCoordinate = EasyOGameX.Utils.stringToCoordinate(current)
+        
+        let isOnlyNearby = $('#input-only-nearby').is(':checked')
+        
+        if (isOnlyNearby) {
+        	return defineCoordinate.isEquals(currentCoordinate)  
+        }
+        
+        return true
+      })
       .toArray()
     
     let allElements = allElementsBeforeSort
@@ -1108,6 +1151,7 @@ function toFlatData(data)
         await GM.setValue('galaxy', serializeObj);
         
         $(mainElement).text(index + " : " + allElementsToFarm.length)
+        Logger.add("Fala nr " + (parseInt(index) + 1) + " / " + max)
       }
       
      	alert('Koniec')
@@ -2153,6 +2197,9 @@ async function drawIdlers() {
         <td data-order="` + (sumOfResource > 0 && showResource ? sumOfResource : 0) + `"><span>` + (sumOfResource > 0 && showResource ? sumOfResource.toLocaleString() : '') + `</span></td>
         <td>` + (lastAttackInSeconds > 0 && lastAttackInSeconds < maximumTimeForTimer ? secondsToReadable(lastAttackInSeconds) : '') + `</td>
         <td>
+        	` + findNearbyPlanet(item.galaxy + `:` + item.system + `:` + item.position) + `
+        </td>
+        <td>
             <a href="#" class="btnActionSpy tooltip" onclick="SendSpy(` + item.galaxy + `,` + item.system + `, ` + item.position + ` ,1,false); return false;" data-tooltip-position="top" data-tooltip-content="<div style='font-size:11px;'>Spy</div>" style="font-size: 7px; color: white;">Szpieguj</a>
             <a href="https://hyper.ogamex.net/galaxy?x=` + item.galaxy + `&y=` + item.system + `" style="font-size: 7px; color: white;">Galaktyka</a>
 				</td>              
@@ -2182,21 +2229,50 @@ async function drawIdlers() {
     	  <li><span style="font-size: 7px; color:gold">Dobra farma</span></li>
     	  <li><span style="font-size: 7px; color:silver">Zbyt mało surowców</span></li>
       </ul>
-    	<table style="font-size: 11px;width: 100%;margin-top: 10px;" id="farm-table">
-      	<thead>
-        	<tr>
-          	<td>Ranking</td>
-            <td>Współrzędne</td>
-            <td>Dystans</td>
-            <td>Surowce</td>
-            <td>Ostatni atak</td>
-            <td>Akcje</td>
-          </tr>
-        </thead>
-        <tbody>
-	      	` + content + `
-        </tbody>
-      </table>
+      
+      <div>
+      	<div style="font-size: 8px;">
+	      	<input type="checkbox" id="input-only-nearby" value="1"/> <label for="input-only-nearby">Atakuj z najbliższej planety (tylko dla Auto Farm by fast espionage)</label>
+  			</div>
+        <div>
+        	<select id="input-maximum-slots">
+          	<option value="*">All available slots</option>
+          	<option value="5">5 slots</option>
+          	<option value="10">10 slots</option>
+          	<option value="15">15 slots</option>
+          	<option value="20">20 slots</option>
+          	<option value="25">25 slots</option>
+          	<option value="30">30 slots</option>
+          	<option value="35">35 slots</option>
+          	<option value="40">40 slots</option>
+          	<option value="45">45 slots</option>
+          	<option value="50">50 slots</option>
+          	<option value="55">55 slots</option>
+          	<option value="60">60 slots</option>
+          	<option value="65">65 slots</option>
+          	<option value="70">70 slots</option>
+          	<option value="75">75 slots</option>
+          	<option value="80">80 slots</option>
+          </select>
+        </div>
+        
+        <table style="font-size: 11px;width: 100%;margin-top: 10px;" id="farm-table">
+          <thead>
+            <tr>
+              <td>Ranking</td>
+              <td>Współrzędne</td>
+              <td>Dystans</td>
+              <td>Surowce</td>
+              <td>Ostatni atak</td>
+              <td>Najbliższa planeta</td>
+              <td>Akcje</td>
+            </tr>
+          </thead>
+          <tbody>
+            ` + content + `
+          </tbody>
+        </table>
+      </div>
     </div>
   `)
   
@@ -2205,8 +2281,31 @@ async function drawIdlers() {
     searching: false,
     paging: false
   });
+}
+
+function findNearbyPlanet(farm) {
+  let current = EasyOGameX.Utils.stringToCoordinate(farm)
+	let availablePlanets = settings.galaxy.farm.availablePlanets
   
-  console.log('complete idlers')
+  let result = null
+  
+  for(let index in availablePlanets) {
+  	let other = availablePlanets[index]
+    
+    let otherCoordinate = EasyOGameX.Utils.stringToCoordinate(other.coordinates)
+  
+    let distance = otherCoordinate.distanceTo(current)
+
+    
+    if (result == null || result.distance > distance) {
+     	result = {
+        source: other,
+       	distance: distance 
+      }
+    }
+  }
+  
+  return result.source.coordinates
 }
 
 function drawAsteroids() {
@@ -2913,6 +3012,14 @@ function Coordinate(galaxy, system, position, type = ObjectType.UNKNOWN)
     	if (this.type != other.type) { return false }
       
       return true
+  }
+  
+  this.distanceTo = function(other) {
+  	if (this.galaxy != other.galaxy) {
+    	return Math.abs(this.system - other.system) * 500 + Math.abs(this.system - other.system);  
+    }
+    
+    return Math.abs(this.system - other.system)
   }
   
   this.toSimpleString = function() {
