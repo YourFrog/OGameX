@@ -69,7 +69,7 @@ const settings = {
     },
     farm: {
       // Minimalny ranking gracza aby uwzględniać go na liście farm
-     	minimum_ranking: 1, //1400,
+     	minimum_ranking: 1400,
       
       // Ważność raportu szpiegowskiego w sekundach (default 45 min)
       validity_of_espionage_report_in_seconds: 45 * 60 * 1_000,
@@ -84,7 +84,7 @@ const settings = {
       capacity: 71_250,
 
       // Minimalna ilość surowców na farmie którą atakujemy
-      minimum_resource: 10_000_000_000,
+      minimum_resource: 50_000_000_000,
       
       // Planety które bierzemy pod uwagę przy farmieniu
       availablePlanets: [
@@ -107,7 +107,7 @@ const settings = {
     /************************************************/
     asteroid: {
       // Maksymalna ilość statków jaka może zostać wysłana
-      ships: 315_000_000,
+      ships: 190_000_000,
       
       // Maksymalna ilość misji w powietrzu
       maximumFleets: 8,
@@ -178,6 +178,7 @@ const STATE_UPDATE_STATISTICS_ASTEROID = 2
 const STATE_AUTO_SEND_MINNERS = 3
 const STATE_AUTO_EXPEDITION_STEP_1 = 4
 const STATE_AUTO_EXPEDITION_COLLECT_DATA = 5 // Zebranie danych odnośnie ilości wysłanych ekspedycji
+const STATE_AUTO_FARM = 6
 
 ////
 // Allow state:
@@ -343,6 +344,12 @@ async function runScript() {
     <div class="menu-item">
       <a href="#" class="text-item" style="color:#4caf50;" id="yourfrog-export">Export Galaxy</a>
     </div>
+  `)
+  
+  $('.galaxy-route').append(`
+		<div style="float:right;padding:2px;border:1px solid rgb(43,63,90);border-left:2px solid rgb(43,63,90);">
+			<a href="#" class="btn-route" style="padding:0px 10px;border-radius:0px;color: #0A0;font-weight: bold;" id="yourfrog-clean">Clean</a>
+		</div>
   `)
   
   $('.galaxy-route').append(`
@@ -595,6 +602,12 @@ async function runScript() {
   $(document).on('click', '#yourfrog-export', function() {
 	    (async() => {
     		exportGalaxy()
+      })()
+  })
+  
+  $(document).on('click', '#yourfrog-clean', function() {
+	    (async() => {
+        await GM.setValue('galaxy', '{}')
       })()
   })
   
@@ -1054,9 +1067,25 @@ function toFlatData(data)
 //     }, packages 30 * 1000)
   }
   
-  // Farmienie po nowemu
-  $(document).on('click', '[data-auto-farm="3"]', function(event) {
-    let mainElement = $(this)
+  $(document).on('click', '#keep-attacking', function(event) {
+    event.preventDefault();
+    
+    (async() => {
+      
+      let isOn = await EasyOGameX.State.is(STATE_AUTO_FARM)
+          
+      if (isOn) {
+        await EasyOGameX.State.set(STATE_NOTHING, {}) 
+      } else {     
+        await EasyOGameX.State.set(STATE_AUTO_FARM, {}) 
+      }
+      
+      unsafeWindow.location.reload()
+    })();
+  })
+  
+  async function autoFarmByFastEspionage() {
+    let mainElement = $('[data-auto-farm="3"]')
     let max = countPossibleSlotsForAttack()
     let defineMax = $('#input-maximum-slots option:selected').val()
     
@@ -1119,43 +1148,47 @@ function toFlatData(data)
     
     let allElementsToFarm = $(allElements).getRange(0, max - 1);
         
+    for(let index in allElementsToFarm) {
+      let element = allElementsToFarm[index]
+
+      let coordinate = EasyOGameX.Utils.stringToCoordinate($(element).attr('data-coordinate'));
+
+      // Ustawienie współrzędnych
+      $('#galaxyInput').val(coordinate.galaxy)
+      $('#systemInput').val(coordinate.system)
+
+      // Pobranie danych
+      $('.x-btn-go')[0].click();
+
+      // Oczekiwanie na załadowanie strony
+      await EasySelenium.waitForElementNotExists('#BackGroundFreezerPreloader_Element');
+
+      // Wysłanie floty
+      let row = $('.galaxy-info .galaxy-item:not(.galaxy-item-head)').eq(coordinate.position - 1)
+      let plunderElement = $('.btnActionPlunder', row)
+
+      plunderElement[0].click()
+
+      // Zapisanie że wysłano
+      let serialize = await GM.getValue('galaxy', '{}');
+      let data = JSON.parse(serialize)
+
+      data[coordinate.toSimpleString()].last_attack = (new Date()).getTime()
+
+      let serializeObj = JSON.stringify(data);
+      await GM.setValue('galaxy', serializeObj);
+
+      $(mainElement).text(index + " : " + allElementsToFarm.length)
+      Logger.add("Fala nr " + (parseInt(index) + 1) + " / " + max)
+    }
+  }
+  
+  // Farmienie po nowemu
+  $(document).on('click', '[data-auto-farm="3"]', function(event) {
     (async() => {
-      for(let index in allElementsToFarm) {
-       	let element = allElementsToFarm[index]
-
-        let coordinate = EasyOGameX.Utils.stringToCoordinate($(element).attr('data-coordinate'));
-
-        // Ustawienie współrzędnych
-        $('#galaxyInput').val(coordinate.galaxy)
-        $('#systemInput').val(coordinate.system)
-
-        // Pobranie danych
-        $('.x-btn-go')[0].click();
-
-        // Oczekiwanie na załadowanie strony
-        await EasySelenium.waitForElementNotExists('#BackGroundFreezerPreloader_Element');
-
-        // Wysłanie floty
-        let row = $('.galaxy-info .galaxy-item:not(.galaxy-item-head)').eq(coordinate.position - 1)
-        let plunderElement = $('.btnActionPlunder', row)
-        
-        plunderElement[0].click()
-
-        // Zapisanie że wysłano
-        let serialize = await GM.getValue('galaxy', '{}');
-        let data = JSON.parse(serialize)
-
-        data[coordinate.toSimpleString()].last_attack = (new Date()).getTime()
-        
-        let serializeObj = JSON.stringify(data);
-        await GM.setValue('galaxy', serializeObj);
-        
-        $(mainElement).text(index + " : " + allElementsToFarm.length)
-        Logger.add("Fala nr " + (parseInt(index) + 1) + " / " + max)
-      }
-      
+    	await autoFarmByFastEspionage()
      	alert('Koniec')
-    })()
+    })();
   })
   
   // Farmienie gdzie jako podstawa służy ilość surowców
@@ -1385,6 +1418,21 @@ function toFlatData(data)
     }, 100)  
     
     switch(true) {
+      case await EasyOGameX.State.is(STATE_AUTO_FARM):
+      		Logger.add("State: STATE_AUTO_FARM")
+        
+        	let selector = '#auto-farm[data-auto-farm="3"]'
+        
+        	// Oczekujemy na załadowanie flot
+       	 	await EasySelenium.waitForElement(selector);
+        
+        	// Czekamy aż zakończy wysyłać
+        	await autoFarmByFastEspionage()
+        
+        	// Odkładamy stronę do odświeżenia
+        	setTimeout(() => { window.location.reload(); }, 60 * 1_000)
+        break;
+        
       case await EasyOGameX.State.is(STATE_NOTHING):
         
         switch(true) {
@@ -1833,26 +1881,42 @@ function findPlanetsByNickname(nickname) {
 
 $(document).ready(function() {
   
+  (function($) {
+    //function that gets a range of dom elements against a jQuery selector
+    //returns an array of dom elements
+    $.fn.getRange = function(start, end) {
+      let elems = [];
 
-(function($) {
-  //function that gets a range of dom elements against a jQuery selector
-  //returns an array of dom elements
-  $.fn.getRange = function(start, end) {
-    let elems = [];
-    
-    for (let i = start; i <= end; i++) {
-      let item = this.get(i)
-      
-      if (typeof item != 'undefined') {
-      	elems.push(this.get(i));
+      for (let i = start; i <= end; i++) {
+        let item = this.get(i)
+
+        if (typeof item != 'undefined') {
+          elems.push(this.get(i));
+        }
       }
-    }
-    
-    return elems;
-  };
-})(jQuery);
+
+      return elems;
+    };
+  })(jQuery);
   
+  $(document).on('click', '#messages-container .x-remove-msg-category', function(event) {
+    event.preventDefault()
+
+    var category = $(this).data('msg-category');
+    unsafeWindow.removeMsgCategory(category);
+  });
+
+  $(document).on('click', '.yourfrog-change-planet', function(event) {
+    let cords = $(this).text()
+    let element = $('span.planet-coords:contains("' + cords + '")').parent()
+    
+    
+    $(element)[0].click()
+  });
+                 
   (async() => {
+		// await GM.setValue('galaxy', '{}');
+    
     let serialize = ''
     
     serialize = await GM.getValue('galaxy', '{}');
@@ -2052,6 +2116,8 @@ function utils_UpdateGalaxySystem() {
       item.is_inactive28 = $('.col-player .isInactive28.tooltip', this).length == 1
       item.is_vacation = $('.col-player .isVacation.tooltip', this).length == 1
       item.is_noob = $('.col-player .isNoob.tooltip', this).length == 1
+      item.is_strong = $('.col-player .isStrong.tooltip', this).length == 1
+      item.is_banned = $('.col-player .isBanned.tooltip', this).length == 1
       item.debris = debris
       item.planet_activity = {
         value: getPlanetActivity(this),
@@ -2186,7 +2252,7 @@ async function drawIdlers() {
     content += `
     	<tr>
       	<td>` + item.ranking + `</td>
-        <td>
+        <td data-order="` + item.system + `">
             <a href="fleet?x=` + item.galaxy + `&y=` + item.system + `&z=` + item.position + `&planet=1&mission=8" class="attack-item" ` + attribute  + ` data-galaxy="` + item.galaxy + `" data-system="` + item.system + `" data-position="` + item.position + `"  ` + (allowAutoFarm ? 'data-allow-auto-farm="1"' : '') + `>
             	<span style="color: ` + highlight + `">
               	 ` + item.cords + ` 
@@ -2197,7 +2263,7 @@ async function drawIdlers() {
         <td data-order="` + (sumOfResource > 0 && showResource ? sumOfResource : 0) + `"><span>` + (sumOfResource > 0 && showResource ? sumOfResource.toLocaleString() : '') + `</span></td>
         <td>` + (lastAttackInSeconds > 0 && lastAttackInSeconds < maximumTimeForTimer ? secondsToReadable(lastAttackInSeconds) : '') + `</td>
         <td>
-        	` + findNearbyPlanet(item.galaxy + `:` + item.system + `:` + item.position) + `
+        	<a href="#" style="color: white;" class="yourfrog-change-planet">` + findNearbyPlanet(item.galaxy + `:` + item.system + `:` + item.position) + `</a>
         </td>
         <td>
             <a href="#" class="btnActionSpy tooltip" onclick="SendSpy(` + item.galaxy + `,` + item.system + `, ` + item.position + ` ,1,false); return false;" data-tooltip-position="top" data-tooltip-content="<div style='font-size:11px;'>Spy</div>" style="font-size: 7px; color: white;">Szpieguj</a>
@@ -2207,12 +2273,15 @@ async function drawIdlers() {
     `
   }
   
+  let autoFarmIsOn = await EasyOGameX.State.is(STATE_AUTO_FARM)
+  
   $('#yourfrog-idlers').remove()
   $('#galaxy-container').append(`
   	<div id="yourfrog-idlers" style="padding: 20px;">
     	<h5>Idlers</h5>
       
       <ul style="margin: 20px; 0px;"s>
+      	<li><a href="#keep-attacking" style="color: white;" id="keep-attacking">Keep attacking (` + (autoFarmIsOn ? 'On' : 'Off') + `)</a></li>
       	<li><a href="#auto-farm" data-auto-farm="1" style="color: white;" id="auto-farm">Auto Farm by distance</a></li>
       	<li><a href="#auto-farm" data-auto-farm="2" style="color: white;" id="auto-farm">Auto Farm by resource</a></li>
       	<li><a href="#auto-farm" data-auto-farm="3" style="color: white;" id="auto-farm">Auto Farm by fast espionage</a></li>
@@ -2279,7 +2348,10 @@ async function drawIdlers() {
   
   let table = new DataTable('#farm-table', {
     searching: false,
-    paging: false
+    paging: false,
+    order: [
+        [3, 'asc']
+    ]
   });
 }
 
@@ -2445,8 +2517,8 @@ const EasySelenium = {
 				let elements = $(selector)	
 				
 				if (elements.length == 0) {
+          resolve()
 					observer.disconnect();
-					return resolve(elements)
 				}
 			})
 			
@@ -2596,6 +2668,7 @@ const EasyOGameX = {
 			
 			let result = []
 			
+      console.log(data.ranges)
 			for(let rangeIndex in data.ranges) {
 				let range = data.ranges[rangeIndex]
 				
@@ -2636,6 +2709,7 @@ const EasyOGameX = {
 				}
 			}
 			
+      console.log('return result')
 			return result
 		}	
 	},
@@ -2975,8 +3049,13 @@ const EasyOGameX = {
 			runAsteroidScanner: async function() {
         $('span.btn-asteroid-find.x-find-asteroid')[0].click();
 
+        console.log('a')
         await EasySelenium.waitForElement('#playerAsteroidTable');
+        
+        console.log('b')
         await EasyOGameX.Galaxy.getSystemsWithAsteroids()
+        
+        console.log('c')
         await EasyOGameX.Galaxy.checkAsteroids()
 			}
 		}
