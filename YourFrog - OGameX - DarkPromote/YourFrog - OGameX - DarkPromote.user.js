@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name     YourFrog - OGameX - DarkPromote
 // @version  1
-// @include  *hyper.ogamex.net/*
+// @include  *.ogamex.net/*
 // @require https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js 
 // @require https://github.com/YourFrog/OGameX/raw/main/YourFrog%20-%20OGameX%20-%20Communicate/YourFrog%20-%20OGameX%20-%20Communicate.user.js
 // @grant           GM.setValue
