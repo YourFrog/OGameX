@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name     YourFrog - OGameX - Layout
 // @version  1
-// @include  *hyper.ogamex.net/*
+// @include  *.ogamex.net/*
 // @require https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js 
 // ==/UserScript==
 
