@@ -1,16 +1,16 @@
 // ==UserScript==
 // @name     YourFrog - OGameX - Resource
 // @version  1
-// @include  *hyper.ogamex.net/home*
-// @include  *hyper.ogamex.net/messages*
-// @include  *hyper.ogamex.net/hangar*
-// @include  *hyper.ogamex.net/defense*
-// @include  *hyper.ogamex.net/research*
-// @include  *hyper.ogamex.net/empire*
-// @include  *hyper.ogamex.net/fleet*
-// @include  *hyper.ogamex.net/building/facility*
-// @include  *hyper.ogamex.net/building/resource*
-// @include  *https://hyper.ogamex.net/fleet/distributeresources*
+// @include  *.ogamex.net/home*
+// @include  *.ogamex.net/messages*
+// @include  *.ogamex.net/hangar*
+// @include  *.ogamex.net/defense*
+// @include  *.ogamex.net/research*
+// @include  *.ogamex.net/empire*
+// @include  *.ogamex.net/fleet*
+// @include  *.ogamex.net/building/facility*
+// @include  *.ogamex.net/building/resource*
+// @include  *https://*.ogamex.net/fleet/distributeresources*
 // @require https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js 
 // @updateURL 
 // @version 1
