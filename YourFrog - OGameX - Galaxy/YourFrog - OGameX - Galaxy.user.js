@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name     YourFrog - OGameX - Galaxy
 // @version  1
-// @include  *https://hyper.ogamex.net/galaxy*
-// @include  *https://hyper.ogamex.net/messages*
-// @include  *https://hyper.ogamex.net/fleet*
-// @include  *https://hyper.ogamex.net/home/playerprofile*
-// @include  *https://hyper.ogamex.net/statistics*
+// @include  *https://*.ogamex.net/galaxy*
+// @include  *https://*.ogamex.net/messages*
+// @include  *https://*.ogamex.net/fleet*
+// @include  *https://*.ogamex.net/home/playerprofile*
+// @include  *https://*.ogamex.net/statistics*
 // @require https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js 
 // @require https://github.com/YourFrog/OGameX/raw/main/YourFrog%20-%20OGameX%20-%20Communicate/YourFrog%20-%20OGameX%20-%20Communicate.user.js
 // @require https://cdn.datatables.net/2.1.4/js/dataTables.min.js
