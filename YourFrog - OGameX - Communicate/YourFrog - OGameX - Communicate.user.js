@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name     YourFrog - OGameX - Communicate
 // @version  1
-// @include  *https://*.ogamex.net/*
+// @include  *https://nexus.ogamex.net/*
 // @require https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js 
 // @grant           GM.setValue
 // @grant           GM.getValue

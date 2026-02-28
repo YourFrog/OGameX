@@ -10,7 +10,7 @@
 // @include  *.ogamex.net/fleet*
 // @include  *.ogamex.net/building/facility*
 // @include  *.ogamex.net/building/resource*
-// @include  *https://*.ogamex.net/fleet/distributeresources*
+// @include  *https://nexus.ogamex.net/fleet/distributeresources*
 // @require https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js 
 // @updateURL 
 // @version 1
@@ -53,10 +53,10 @@ const config = {
   	from: {
       // Współrzędne planety, Format: {system}:{układ}:{pozycja}
 //   		coordinates: "1:145:8", 
-  		coordinates: "1:287:9", 
+  		coordinates: "1:314:12", 
       
       // Enum: TYPE_PLANET, TYPE_MOON
-  		type: TYPE_PLANET
+  		type: TYPE_MOON
 		}
 	}
 }
@@ -572,8 +572,8 @@ async function YourFrogAddMineLevelsToPlanets() {
     
   }
   
-  // Utrzymuj proporcje 4 - 0 - (-2)
-  if (minimum.deuter + 2 < minimum.crystal) {
+  // Utrzymuj proporcje 4 - 0 - (-4)
+  if (minimum.deuter + 4 < minimum.crystal) {
     minimum.metal = 0
     minimum.crystal = 0
   } else {
